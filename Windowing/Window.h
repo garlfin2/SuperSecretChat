@@ -19,12 +19,14 @@ namespace Discord
 {
     enum class IWindowType
     {
-        Window = 0x00CF0000,
-        Button = 0,
+        Window,
+        Button,
         Label,
+        TextBox
     };
 
     std::string ToString(IWindowType e);
+    long ToInternalType(IWindowType e);
 
     // TODO
     struct WindowClass { };
@@ -32,7 +34,7 @@ namespace Discord
     class IWindow
     {
     public:
-        IWindow(IWindowType type, const std::string& name, uvec2 position, uvec2 size, const IWindow* parent = nullptr);
+        IWindow(IWindowType type, std::string_view name, uvec2 position, uvec2 size, const IWindow* parent = nullptr);
         virtual ~IWindow();
 
         IWindow(IWindow&&) = default;
@@ -45,13 +47,14 @@ namespace Discord
         static void RegisterDefaultStyles();
         static void RegisterStyle(IWindowType type, const WindowClass& windowClass);
 
-        [[nodiscard]] const std::string& GetWindowText() const { return _text; }
         [[nodiscard]] u16vec2 GetWindowSize() const { return _size; }
 
     protected:
         virtual void ProcessInput(uint message, uint64_t wideParam, uint32_t param);
         virtual void Paint() {};
-        virtual void OnClick() {};
+        virtual void OnCommand() = 0;
+
+        [[nodiscard]] HWND GetHWND() const { return _hwnd; }
 
     private:
         static LRESULT WindowProc(HWND, uint, uint64_t, int64_t);
@@ -59,7 +62,6 @@ namespace Discord
         HWND _hwnd;
 
         const IWindow* _parent;
-        std::string _text;
         u16vec2 _size;
     };
 
@@ -67,36 +69,64 @@ namespace Discord
     class Button final : public IWindow
     {
     public:
-        Button(const std::string& name, uvec2 pos, uvec2 size, FUNC_T&& func, const IWindow& window) :
-            IWindow(IWindowType::Button, name, pos, size, &window),
+        Button(std::string_view text, uvec2 pos, uvec2 size, FUNC_T&& func, const IWindow& window) :
+            IWindow(IWindowType::Button, text, pos, size, &window),
             _func(std::move(func))
         {}
 
-        Button(const std::string& name, uvec2 pos, uvec2 size, const FUNC_T& func, const IWindow& window) :
-            IWindow(IWindowType::Button, name, pos, size, &window),
+        Button(std::string_view text, uvec2 pos, uvec2 size, const FUNC_T& func, const IWindow& window) :
+            IWindow(IWindowType::Button, text, pos, size, &window),
             _func(func)
         {}
 
     protected:
-        void OnClick() override { _func(*this); }
+        void OnCommand() override { _func(*this); }
 
     private:
         FUNC_T _func;
     };
 
+    class TextField final : public IWindow
+    {
+    public:
+        TextField(uvec2 pos, uvec2 size, const IWindow& window, std::string_view defaultText = "") :
+            IWindow(IWindowType::TextBox, defaultText, pos, size, &window),
+            _text(defaultText)
+        {}
+
+        [[nodiscard]] const std::string& GetText() const { return _text; }
+
+    protected:
+        void OnCommand() override;
+
+    private:
+        std::string _text;
+    };
+
+    class Label final : public IWindow
+    {
+    public:
+        Label(const char* text, uvec2 pos, uvec2 size, const IWindow& window) :
+            IWindow(IWindowType::Label, text, pos, size, &window)
+        {}
+
+        void SetText(std::string_view text);
+
+    protected:
+        void OnCommand() override {};
+    };
+
     class Window final : public IWindow
     {
     public:
-        explicit Window(uvec2 size) : IWindow(IWindowType::Window, "Discord", uvec2(0x80000000), size),
-            _button("Test", uvec2(), uvec2(128, 128), [](const IWindow& w)
-            {
-                auto size = w.GetWindowSize();
-                std::println("Window Size: ({}, {})", size.x, size.y);
-            }, *this)
-        {
-        }
+        explicit Window(uvec2 size);
+
+    protected:
+        void OnCommand() override {};
 
     private:
         Button<std::function<void(IWindow&)>> _button;
+        TextField _textField;
+        Label _testLabel;
     };
 }

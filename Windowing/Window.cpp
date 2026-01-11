@@ -12,14 +12,32 @@ namespace Discord
 {
     LRESULT IWindow::WindowProc(HWND hwnd, UINT uMSG, WPARAM wParam, LPARAM lParam)
     {
-        IWindow* obj = nullptr;
-
-        if(uMSG != WM_NCCREATE)
-            obj = reinterpret_cast<IWindow*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
-
-        if(obj)
+        if(auto* obj = reinterpret_cast<IWindow*>(GetWindowLongPtr(hwnd, GWLP_USERDATA)))
                obj->ProcessInput(uMSG, wParam, lParam);
         return DefWindowProcA(hwnd, uMSG, wParam, lParam);
+    }
+
+    void TextField::OnCommand()
+    {
+        const int length = GetWindowTextLengthA(GetHWND());
+        _text = std::string(length, '\0');
+        GetWindowTextA(GetHWND(), _text.data(), length + 1);
+    }
+
+    void Label::SetText(std::string_view text)
+    {
+        SetWindowTextA(GetHWND(), text.data());
+    }
+
+    Window::Window(uvec2 size): IWindow(IWindowType::Window, "Secretest Chat", uvec2(0x80000000), size),
+        _button("Test", uvec2(), uvec2(128, 128), [](const IWindow& w)
+        {
+            auto size = w.GetWindowSize();
+            MessageBox(nullptr, std::format("Button Size: ({}, {})", size.x, size.y).data(), "", MB_OK);
+        }, *this),
+        _textField(uvec2(0, 300), uvec2(128, 32), *this),
+        _testLabel("Test label!", uvec2(0, 500), uvec2(128, 32), *this)
+    {
     }
 
     std::string ToString(const IWindowType e)
@@ -28,21 +46,34 @@ namespace Discord
         {
             { IWindowType::Window, "Window" },
             { IWindowType::Button, "Button" },
-            { IWindowType::Label, "Static" }
+            { IWindowType::Label, "Static" },
+            { IWindowType::TextBox, "Edit" }
         };
 
         return map[e];
     }
 
-    IWindow::IWindow(IWindowType type, const std::string& text, uvec2 position, uvec2 size, const IWindow* parent) :
+    long ToInternalType(IWindowType e)
+    {
+        static std::unordered_map<IWindowType, long> map
+        {
+            { IWindowType::Window, WS_OVERLAPPEDWINDOW },
+            { IWindowType::Button, BS_FLAT },
+            { IWindowType::Label, 0 },
+            { IWindowType::TextBox, WS_BORDER | ES_LEFT | ES_AUTOHSCROLL | ES_MULTILINE }
+        };
+
+        return map[e];
+    }
+
+    IWindow::IWindow(IWindowType type, std::string_view text, uvec2 position, uvec2 size, const IWindow* parent) :
         _parent(parent),
-        _text(text),
         _size(size)
     {
         RegisterDefaultStyles();
 
         HINSTANCE hInstance = GetModuleHandle(nullptr);
-        DWORD style = WS_VISIBLE | static_cast<DWORD>(type);
+        DWORD style = WS_VISIBLE | ToInternalType(type);
         if(_parent)
             style |= WS_CHILD;
 
@@ -122,7 +153,7 @@ namespace Discord
         case WM_COMMAND:
             window = reinterpret_cast<IWindow*>(GetWindowLongPtr(reinterpret_cast<HWND>(param), GWLP_USERDATA));
             if(window)
-                window->OnClick();
+                window->OnCommand();
             break;
         default:
             break;
