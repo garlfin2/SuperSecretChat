@@ -8,7 +8,7 @@
 struct addrinfo;
 using SOCKET = uint64_t;
 
-#define LOCALHOST 0
+#define LOCALHOST 0x0100007F
 
 namespace Secretest
 {
@@ -23,6 +23,7 @@ namespace Secretest
     {
         Address(uint32_t ip, uint16_t port) : IP(ip), Port(port) {};
         Address(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint16_t port) : IPBytes{ a, b, c, d }, Port(port) {};
+        Address() = default;
 
         union
         {
@@ -42,11 +43,16 @@ namespace Secretest
         Connection(const Connection&) = delete;
         Connection& operator=(const Connection&) = delete;
 
-        Connection(Connection&& b);
-        Connection& operator=(Connection&& b);
+        Connection(Connection&& b) noexcept;
+        Connection& operator=(Connection&& b) noexcept;
 
+        // Bind to socket, start listening for connections.
         void Listen();
+        // Connects to host.
+        void Connect();
+        // Close Socket (Stop hosting, disconnect)
         void Close();
+
         Connection Accept();
 
         ~Connection();
@@ -55,6 +61,7 @@ namespace Secretest
 
     private:
         SOCKET _socket = ~0;
+        Address _address = {};
     };
 
     class Server

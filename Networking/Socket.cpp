@@ -42,34 +42,26 @@ namespace Secretest
     Client::Client(Address address) :
         _self(address)
     {
-
+        _self.Connect();
     }
 
-    Connection::Connection(const Address address)
+    Connection::Connection(const Address address) : _address(address)
     {
-        sockaddr_in hint{};
-        hint.sin_family = AF_INET;
-        hint.sin_port = address.Port;
-        hint.sin_addr.S_un.S_addr = address.IP;
-
         _socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if(_socket == INVALID_SOCKET)
         {
             MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Socket Creation Error", MB_ICONERROR);
             return;
         }
-
-        if(bind(_socket, reinterpret_cast<sockaddr*>(&hint), sizeof(sockaddr_in)) == SOCKET_ERROR)
-            MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Binding Error", MB_ICONERROR);
     }
 
-    Connection::Connection(Connection&& b)
+    Connection::Connection(Connection&& b) noexcept
     {
         _socket = b._socket;
         b._socket = INVALID_SOCKET;
     }
 
-    Connection& Connection::operator=(Connection&& b)
+    Connection& Connection::operator=(Connection&& b) noexcept
     {
         if(&b == this)
             return *this;
@@ -83,6 +75,14 @@ namespace Secretest
 
     void Connection::Listen()
     {
+        sockaddr_in hint{};
+        hint.sin_family = AF_INET;
+        hint.sin_port = _address.Port;
+        hint.sin_addr.S_un.S_addr = _address.IP;
+
+        if(bind(_socket, reinterpret_cast<const sockaddr*>(&hint), sizeof(sockaddr_in)) == SOCKET_ERROR)
+            MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Binding Error", MB_ICONERROR);
+
         if(listen(_socket, SOMAXCONN) == SOCKET_ERROR)
         {
             MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Listening Error", MB_ICONERROR);
@@ -94,6 +94,17 @@ namespace Secretest
         connection.Close();
     }
 
+    void Connection::Connect()
+    {
+        sockaddr_in hint{};
+        hint.sin_family = AF_INET;
+        hint.sin_port = _address.Port;
+        hint.sin_addr.S_un.S_addr = _address.IP;
+
+        if(connect(_socket, reinterpret_cast<const sockaddr*>(&hint), sizeof(sockaddr_in)) == SOCKET_ERROR)
+            MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Connection Error", MB_ICONERROR);
+    }
+
     void Connection::Close()
     {
         closesocket(_socket);
@@ -103,13 +114,13 @@ namespace Secretest
     Connection Connection::Accept()
     {
         Connection result{};
-        accept(result._socket, nullptr, nullptr);
+        result._socket = accept(_socket, nullptr, nullptr);
         return result;
     }
 
     Connection::~Connection()
     {
-        closesocket(_socket);
+        Close();
     }
 }
 
