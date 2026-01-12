@@ -8,7 +8,7 @@
 #include <winuser.h>
 #include <unordered_map>
 
-namespace Discord
+namespace Secretest
 {
     LRESULT IWindow::WindowProc(HWND hwnd, UINT uMSG, WPARAM wParam, LPARAM lParam)
     {

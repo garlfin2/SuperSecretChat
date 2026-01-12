@@ -15,7 +15,7 @@ using HWND = HWND__*;
 using ATOM = uint16_t;
 using LRESULT = int64_t;
 
-namespace Discord
+namespace Secretest
 {
     enum class IWindowType
     {
