@@ -14,8 +14,8 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} ${COMPILE_FLAGS_DEBUG}")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
-add_executable(Secretest App/main.cpp Windowing/Window.cpp resources.o Networking/Socket.cpp)
-add_executable(SecretestServer Server/main.cpp Windowing/Window.cpp resources.o Networking/Socket.cpp)
+add_executable(Secretest resources.o App/main.cpp Secretest/Windowing/Window.cpp Secretest/Networking/Socket.cpp App/ClientWindow.cpp)
+add_executable(SecretestServer resources.o Server/main.cpp Secretest/Windowing/Window.cpp Secretest/Networking/Socket.cpp Server/ServerWindow.cpp)
 
 target_link_libraries(Secretest PRIVATE "-lcomctl32 -lstdc++exp -lws2_32")
 target_link_libraries(SecretestServer PRIVATE "-lcomctl32 -lstdc++exp -lws2_32")

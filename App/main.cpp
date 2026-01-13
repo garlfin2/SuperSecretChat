@@ -1,9 +1,7 @@
-#include <Windowing/Window.h>
-#include <Networking/Socket.h>
+#include <App/ClientWindow.h>
 
 #include <windows.h>
 #include <commctrl.h>
-
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmd)
 {
@@ -12,11 +10,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     controls.dwICC = ICC_STANDARD_CLASSES;
     InitCommonControlsEx(&controls);
 
-    Secretest::SocketContext context{};
-    Secretest::Client client{ Secretest::Address(LOCALHOST, 2831) };
+    Secretest::SocketContext socketContext{};
 
-    Secretest::Window window{ uvec2(980, 720) };
-    Secretest::Window::RunWindows();
+    Secretest::ClientWindow window{ uvec2(980, 720), Secretest::Address(LOCALHOST, 3283) };
+    Secretest::IWindow::RunWindows();
 
     return 0;
 }

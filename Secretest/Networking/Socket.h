@@ -53,6 +53,8 @@ namespace Secretest
         Exception = 1 << 2
     };
 
+    constexpr uint64_t InvalidSocket = ~0;
+
     class IConnection
     {
     public:
@@ -66,11 +68,11 @@ namespace Secretest
 
         [[nodiscard]] Address GetAddress() const { return Address_; }
         [[nodiscard]] int32_t GetStatus(IConnectionStatusQueryType type) const;
-        [[nodiscard]] bool IsOpen() const { return Socket_; }
+        [[nodiscard]] bool IsOpen() const { return Socket_ != InvalidSocket; }
 
-        void Close();
+        virtual void Close();
 
-        ~IConnection();
+        virtual ~IConnection();
 
     protected:
         SOCKET Socket_ = ~0;
@@ -87,11 +89,10 @@ namespace Secretest
         ClientConnection(ClientConnection&& b) noexcept = default;
         ClientConnection& operator=(ClientConnection&& b) noexcept = default;
 
-        bool ReceiveData(std::span<uint8_t> buf, size_t& bytesWritten) const;
+        bool ReceiveData(std::span<char> buf, size_t& bytesWritten) const;
+        bool SendData(std::span<const char> buf) const;
 
         friend class Server;
-
-        ~ClientConnection();
 
     private:
         explicit ClientConnection(SOCKET socket);
@@ -104,18 +105,18 @@ namespace Secretest
 
         void Listen();
         void Join();
-        void Close();
+        void Close() override;
 
         friend class ClientConnection;
 
-        ~Server();
+        ~Server() override;
 
     protected:
         ClientConnection Accept(Address address = {}) const;
 
-        virtual void OnConnection(ClientConnection& connection);
+        virtual void OnConnect(ClientConnection& connection);
         virtual void OnDisconnect(ClientConnection& connection);
-        virtual void OnMessage(ClientConnection& connection, const std::span<uint8_t>& data);
+        virtual void OnMessage(ClientConnection& connection, std::span<const char> data);
 
     private:
         void GetConnections();
@@ -131,10 +132,25 @@ namespace Secretest
     class Client : public IConnection
     {
     public:
-        Client() = default;
-        Client(Client&& b) noexcept = default;
-        Client& operator=(Client&& b) noexcept = default;
-
         explicit Client(Address address);
+
+        void Listen();
+        void Join();
+        void Close() override;
+
+        bool ReceiveData(std::span<char> buf, size_t& bytesWritten) const;
+        bool SendData(std::span<const char> buf) const;
+
+        ~Client() override;
+
+    protected:
+        virtual void OnConnect();
+        virtual void OnDisconnect();
+        virtual void OnMessage(std::span<const char> data);
+
+    private:
+        std::mutex _state;
+        std::thread _thread;
+        volatile bool _shouldClose = false;
     };
 }

@@ -4,10 +4,10 @@
 
 #pragma once
 
+#include <Secretest/Utility/vec2.h>
 #include <functional>
 #include <string>
 #include <thread>
-#include <Utility/vec2.h>
 #include <print>
 
 struct HWND__;
@@ -65,16 +65,16 @@ namespace Secretest
         u16vec2 _size;
     };
 
-    template<typename FUNC_T> requires requires(FUNC_T f, IWindow& w) { { f(w) }; }
-    class Button final : public IWindow
+    template<typename FUNC_T> requires requires(FUNC_T f, IWindow& b) { { f(b) }; }
+    class IButton final : public IWindow
     {
     public:
-        Button(std::string_view text, uvec2 pos, uvec2 size, FUNC_T&& func, const IWindow& window) :
+        IButton(std::string_view text, uvec2 pos, uvec2 size, FUNC_T&& func, const IWindow& window) :
             IWindow(IWindowType::Button, text, pos, size, &window),
             _func(std::move(func))
         {}
 
-        Button(std::string_view text, uvec2 pos, uvec2 size, const FUNC_T& func, const IWindow& window) :
+        IButton(std::string_view text, uvec2 pos, uvec2 size, const FUNC_T& func, const IWindow& window) :
             IWindow(IWindowType::Button, text, pos, size, &window),
             _func(func)
         {}
@@ -85,6 +85,8 @@ namespace Secretest
     private:
         FUNC_T _func;
     };
+
+    using Button = IButton<std::function<void(IWindow&)>>;
 
     class TextField final : public IWindow
     {
@@ -114,19 +116,5 @@ namespace Secretest
 
     protected:
         void OnCommand() override {};
-    };
-
-    class Window final : public IWindow
-    {
-    public:
-        explicit Window(uvec2 size);
-
-    protected:
-        void OnCommand() override {};
-
-    private:
-        Button<std::function<void(IWindow&)>> _button;
-        TextField _textField;
-        Label _testLabel;
     };
 }

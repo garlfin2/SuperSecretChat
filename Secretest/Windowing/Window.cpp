@@ -29,17 +29,6 @@ namespace Secretest
         SetWindowTextA(GetHWND(), text.data());
     }
 
-    Window::Window(uvec2 size): IWindow(IWindowType::Window, "Secretest Chat", uvec2(0x80000000), size),
-        _button("Test", uvec2(), uvec2(128, 128), [](const IWindow& w)
-        {
-            auto size = w.GetWindowSize();
-            MessageBox(nullptr, std::format("Button Size: ({}, {})", size.x, size.y).data(), "", MB_OK);
-        }, *this),
-        _textField(uvec2(0, 300), uvec2(128, 32), *this),
-        _testLabel("Test label!", uvec2(0, 500), uvec2(128, 32), *this)
-    {
-    }
-
     std::string ToString(const IWindowType e)
     {
         static std::unordered_map<IWindowType, std::string> map

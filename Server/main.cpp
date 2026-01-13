@@ -1,5 +1,4 @@
-#include <Windowing/Window.h>
-#include <Networking/Socket.h>
+#include <Server/ServerWindow.h>
 
 #include <windows.h>
 #include <commctrl.h>
@@ -13,11 +12,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     InitCommonControlsEx(&controls);
 
     Secretest::SocketContext context{};
-    Secretest::Server server{ 2831 };
-    server.Listen();
 
-    Secretest::Window window{ uvec2(980, 720) };
-    Secretest::Window::RunWindows();
+    Secretest::ServerWindow window{ uvec2(980, 720), 3283 };
+    Secretest::IWindow::RunWindows();
 
     return 0;
 }
