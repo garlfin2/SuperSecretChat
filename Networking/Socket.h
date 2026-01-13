@@ -3,7 +3,9 @@
 //
 
 #pragma once
+
 #include <cstdint>
+#include <list>
 #include <mutex>
 #include <vector>
 
@@ -12,6 +14,8 @@ using SOCKET = uint64_t;
 using WSAEVENT = void*;
 
 #define LOCALHOST 0x0100007F
+
+#define SOCKET_BUF_LENGTH 512
 
 namespace Secretest
 {
@@ -28,6 +32,11 @@ namespace Secretest
         Address(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint16_t port) : IPBytes{ a, b, c, d }, Port(port) {};
         Address() = default;
 
+        explicit operator std::string()
+        {
+            return std::format("{}.{}.{}.{}:{}", IPBytes[3], IPBytes[2], IPBytes[1], IPBytes[0], Port);
+        }
+
         union
         {
             uint32_t IP;
@@ -35,6 +44,13 @@ namespace Secretest
         };
 
         uint16_t Port;
+    };
+
+    enum class IConnectionStatusQueryType
+    {
+        Read = 1 << 0,
+        Write = 1 << 1,
+        Exception = 1 << 2
     };
 
     class IConnection
@@ -50,6 +66,7 @@ namespace Secretest
         IConnection& operator=(IConnection&& b) noexcept;
 
         [[nodiscard]] Address GetAddress() const { return Address_; }
+        [[nodiscard]] int32_t GetStatus(IConnectionStatusQueryType type) const;
 
         void Close();
 
@@ -63,51 +80,57 @@ namespace Secretest
     class Server;
 
     // Server to client connection
-    class ClientConnection : private IConnection
+    class ClientConnection : public IConnection
     {
     public:
-        ClientConnection();
         ClientConnection(SOCKET socket, Server& server);
 
         friend class Server;
 
+        ~ClientConnection();
+
     private:
-        void Join();
         void Listen();
+        void Join();
+        void Close();
 
         std::thread _messageThread;
         std::mutex _state;
         Server* _server = nullptr;
+        volatile bool _shouldClose = false;
     };
 
-    class Server : private IConnection
+    class Server : public IConnection
     {
     public:
         explicit Server(uint16_t port);
-        virtual ~Server() = default;
 
         void Listen();
+        void Join();
         void Close();
 
-    protected:
-        ClientConnection Accept(Address address = {});
+        friend class ClientConnection;
 
-        virtual void OnConnectionRequest();
-        virtual void OnConnectionAccept();
-        virtual void OnDisconnect();
-        virtual void OnMessage();
+        ~Server();
+
+    protected:
+        std::unique_ptr<ClientConnection> Accept(Address address = {});
+
+        virtual void OnConnection(ClientConnection& connection);
+        virtual void OnDisconnect(ClientConnection& connection);
+        virtual void OnMessage(ClientConnection& connection, const std::vector<uint8_t>& data);
 
     private:
-        std::vector<ClientConnection> _clients;
+        std::list<std::unique_ptr<ClientConnection>> _clients;
         std::mutex _state;
-        bool _shouldRun = true;
+        std::thread _thread;
+        volatile bool _shouldClose = false;
     };
 
     // Client to server connection
-    class Client : public  IConnection
+    class Client : public IConnection
     {
     public:
         explicit Client(Address address);
-        virtual ~Client() = default;
     };
 }

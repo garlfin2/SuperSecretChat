@@ -73,24 +73,24 @@ namespace Secretest
         RegisterDefaultStyles();
 
         HINSTANCE hInstance = GetModuleHandle(nullptr);
+
         DWORD style = WS_VISIBLE | ToInternalType(type);
-        if(_parent)
-            style |= WS_CHILD;
+        if(_parent) style |= WS_CHILD;
 
         _hwnd = CreateWindowEx(
-                    0,
-                    ToString(type).c_str(),
-                    text.data(),
-                    style,
-                    position.x,
-                    position.y,
-                    size.x,
-                    size.y,
-                    _parent ? _parent->_hwnd : nullptr,
-                    nullptr,
-                    hInstance,
-                    this
-                );
+            0,
+            ToString(type).c_str(),
+            text.data(),
+            style,
+            position.x,
+            position.y,
+            size.x,
+            size.y,
+            _parent ? _parent->_hwnd : nullptr,
+            nullptr,
+            hInstance,
+            this
+        );
 
         SetWindowLongPtr(_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     }

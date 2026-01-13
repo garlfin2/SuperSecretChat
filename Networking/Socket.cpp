@@ -3,11 +3,13 @@
 //
 
 #include "Socket.h"
+#include "Utility/Enum.h"
 
 #include <format>
 #include <string>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <print>
 
 namespace Secretest
 {
@@ -32,7 +34,7 @@ namespace Secretest
         WSACleanup();
     }
 
-    ClientConnection Server::Accept(Address address)
+    std::unique_ptr<ClientConnection> Server::Accept(Address address)
     {
         sockaddr_in hint{};
         hint.sin_family = AF_INET;
@@ -42,11 +44,28 @@ namespace Secretest
         static int hintLength = sizeof(sockaddr_in);
 
         sockaddr* addr = address.IP ? reinterpret_cast<sockaddr*>(&hint) : nullptr;
-        int* addrlen = address.IP ? &hintLength : nullptr;
+        int* addrSize = address.IP ? &hintLength : nullptr;
 
-        ClientConnection result{};
-        result.Socket_ = accept(Socket_, addr, addrlen);
-        return result;
+        const SOCKET socket = accept(Socket_, addr, addrSize);
+        if(socket != INVALID_SOCKET)
+            return std::make_unique<ClientConnection>(socket, *this);
+        return {};
+    }
+
+    void Server::OnConnection(ClientConnection& connection)
+    {
+        std::string ip = static_cast<std::string>(connection.GetAddress());
+        MessageBoxA(nullptr, ip.c_str(), "New Connection!", MB_OK);
+    }
+
+    void Server::OnMessage(ClientConnection& connection, const std::vector<uint8_t>& data)
+    {
+
+    }
+
+    void Server::OnDisconnect(ClientConnection& connection)
+    {
+
     }
 
     IConnection::IConnection(const Address address) : Address_(address)
@@ -77,6 +96,21 @@ namespace Secretest
         return *this;
     }
 
+    int32_t IConnection::GetStatus(IConnectionStatusQueryType type) const
+    {
+        const static timeval doNotBlock{ 0, 0 };
+
+        fd_set set{ 1, { Socket_ } };
+
+        return select(
+            0,
+            CheckEnumFlags(type, IConnectionStatusQueryType::Read) ? &set : nullptr,
+            CheckEnumFlags(type, IConnectionStatusQueryType::Write) ? &set : nullptr,
+            CheckEnumFlags(type, IConnectionStatusQueryType::Exception) ? &set : nullptr,
+            &doNotBlock
+        );
+    }
+
     void IConnection::Close()
     {
         closesocket(Socket_);
@@ -92,11 +126,51 @@ namespace Secretest
         _server(&server)
     {
         Socket_ = socket;
+
+        sockaddr_in address;
+        static int addrSize = sizeof(address);
+
+        getpeername(socket, reinterpret_cast<sockaddr*>(&address), &addrSize);
+
+        Address_ = Address(address.sin_addr.S_un.S_addr, address.sin_port);
+    }
+
+    ClientConnection::~ClientConnection()
+    {
+        Close();
+    }
+
+    void ClientConnection::Listen()
+    {
+        _messageThread = std::thread([this]()
+        {
+            {
+                std::unique_lock l{_state};
+                _shouldClose = false;
+            }
+            char buf[SOCKET_BUF_LENGTH];
+            while(recv(Socket_, buf, sizeof(buf), 0) > 0 && !_shouldClose)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        });
+        _messageThread.detach();
     }
 
     void ClientConnection::Join()
     {
-        _messageThread.join();
+        {
+            std::unique_lock l{_state};
+            _shouldClose = true;
+        }
+        if(_messageThread.joinable())
+            _messageThread.join();
+    }
+
+    void ClientConnection::Close()
+    {
+        Join();
+        IConnection::Close();
     }
 
     Client::Client(Address address) : IConnection(address)
@@ -131,23 +205,55 @@ namespace Secretest
         }
     }
 
+    Server::~Server()
+    {
+        Close();
+    }
+
     void Server::Listen()
     {
+        _thread = std::thread([this]()
+        {
+            {
+                std::unique_lock l{_state};
+                _shouldClose = false;
+            }
 
+            while(!_shouldClose)
+            {
+                std::unique_lock l{_state};
+
+                std::unique_ptr<ClientConnection> incoming;
+                if(GetStatus(IConnectionStatusQueryType::Read) > 0 && ((incoming = Accept())))
+                {
+                    OnConnection(*incoming);
+                    incoming->Listen();
+                    _clients.push_back(std::move(incoming));
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        });
+        _thread.detach();
+    }
+
+    void Server::Join()
+    {
+        {
+            std::scoped_lock lock{ _state };
+            _shouldClose = true;
+        }
+
+        for(const auto& client : _clients)
+            client->Join();
     }
 
     void Server::Close()
     {
-        {
-            std::scoped_lock lock{ _state };
-            _clients.clear();
-            _shouldRun = false;
+        Join();
 
-            for(ClientConnection& client : _clients)
-                client.Join();
-        }
+        _clients.clear();
 
         IConnection::Close();
     }
 }
-
