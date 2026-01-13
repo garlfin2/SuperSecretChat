@@ -17,24 +17,16 @@ using LRESULT = int64_t;
 
 namespace Secretest
 {
-    enum class IWindowType
+    struct IWindowClass
     {
-        Window,
-        Button,
-        Label,
-        TextBox
+        std::string_view Class;
+        long Flags;
     };
-
-    std::string ToString(IWindowType e);
-    long ToInternalType(IWindowType e);
-
-    // TODO
-    struct WindowClass { };
 
     class IWindow
     {
     public:
-        IWindow(IWindowType type, std::string_view name, uvec2 position, uvec2 size, const IWindow* parent = nullptr);
+        IWindow(IWindowClass windowClass, std::string_view name, uvec2 position, uvec2 size, const IWindow* parent = nullptr);
         virtual ~IWindow();
 
         IWindow(IWindow&&) = default;
@@ -45,7 +37,6 @@ namespace Secretest
 
         static void RunWindows();
         static void RegisterDefaultStyles();
-        static void RegisterStyle(IWindowType type, const WindowClass& windowClass);
 
         [[nodiscard]] u16vec2 GetWindowSize() const { return _size; }
 
@@ -70,7 +61,7 @@ namespace Secretest
     {
     public:
         IButton(std::string_view text, uvec2 pos, uvec2 size, FUNC_T&& func, const IWindow& window) :
-            IWindow(IWindowType::Button, text, pos, size, &window),
+            IWindow({ "Button",  }, text, pos, size, &window),
             _func(std::move(func))
         {}
 
@@ -117,4 +108,6 @@ namespace Secretest
     protected:
         void OnCommand() override {};
     };
+
+    class Window final :
 }

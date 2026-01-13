@@ -9,15 +9,12 @@
 
 namespace Secretest
 {
-    class ClientWindow : public IWindow
+    class ClientWindow final: public IWindow, public Client
     {
     public:
         explicit ClientWindow(uvec2 size = uvec2(1440, 720), Address address = {});
 
     protected:
         void OnCommand() override;
-
-    private:
-        Client _client;
     };
 }

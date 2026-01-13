@@ -8,9 +8,9 @@ namespace Secretest
 {
     ServerWindow::ServerWindow(uvec2 size, uint16_t port) :
         IWindow(IWindowType::Window, "Secretest Server", uvec2(), size),
-        _server(port)
+        Server(port)
     {
-        _server.Listen();
+        Listen();
     }
 
     void ServerWindow::OnCommand()

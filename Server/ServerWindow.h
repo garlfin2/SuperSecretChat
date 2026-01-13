@@ -9,15 +9,14 @@
 
 namespace Secretest
 {
-    class ServerWindow final : public IWindow
+    class ServerWindow final : public IWindow, public Server
     {
     public:
         explicit ServerWindow(uvec2 size = uvec2(1440, 720), uint16_t port = 3823);
 
     protected:
         void OnCommand() override;
-
-    private:
-        Server _server;
+        void OnConnect(ClientConnection& connection) override;
+        void OnDisconnect(ClientConnection& connection) override;
     };
 }

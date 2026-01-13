@@ -3,8 +3,8 @@ project(Discord)
 
 set(CMAKE_CXX_STANDARD 23)
 
-set(COMPILE_FLAGS_RELEASE "-O3 -static -s -static-libgcc -mwindows")
-set(COMPILE_FLAGS_DEBUG "-O0 -DDEBUG -static -static-libgcc -mwindows")
+set(COMPILE_FLAGS_RELEASE "-Wall -Werror -O3 -static -s -static-libgcc -mwindows")
+set(COMPILE_FLAGS_DEBUG "-Wall -Werror -O0 -DDEBUG -static -static-libgcc -mwindows")
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${COMPILE_FLAGS_RELEASE}")
 set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} ${COMPILE_FLAGS_RELEASE}")

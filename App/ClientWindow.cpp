@@ -8,9 +8,9 @@ namespace Secretest
 {
     ClientWindow::ClientWindow(uvec2 size, Address address) :
         IWindow(IWindowType::Window, "Secretest", uvec2(), size),
-        _client(address)
+        Client(address)
     {
-        _client.Listen();
+        Listen();
     }
 
     void ClientWindow::OnCommand()
