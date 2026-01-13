@@ -34,40 +34,6 @@ namespace Secretest
         WSACleanup();
     }
 
-    std::unique_ptr<ClientConnection> Server::Accept(Address address)
-    {
-        sockaddr_in hint{};
-        hint.sin_family = AF_INET;
-        hint.sin_port = address.Port;
-        hint.sin_addr.S_un.S_addr = address.IP;
-
-        static int hintLength = sizeof(sockaddr_in);
-
-        sockaddr* addr = address.IP ? reinterpret_cast<sockaddr*>(&hint) : nullptr;
-        int* addrSize = address.IP ? &hintLength : nullptr;
-
-        const SOCKET socket = accept(Socket_, addr, addrSize);
-        if(socket != INVALID_SOCKET)
-            return std::make_unique<ClientConnection>(socket, *this);
-        return {};
-    }
-
-    void Server::OnConnection(ClientConnection& connection)
-    {
-        std::string ip = static_cast<std::string>(connection.GetAddress());
-        MessageBoxA(nullptr, ip.c_str(), "New Connection!", MB_OK);
-    }
-
-    void Server::OnMessage(ClientConnection& connection, const std::vector<uint8_t>& data)
-    {
-
-    }
-
-    void Server::OnDisconnect(ClientConnection& connection)
-    {
-
-    }
-
     IConnection::IConnection(const Address address) : Address_(address)
     {
         Socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -81,6 +47,7 @@ namespace Secretest
     IConnection::IConnection(IConnection&& b) noexcept
     {
         Socket_ = b.Socket_;
+        Address_ = b.Address_;
         b.Socket_ = INVALID_SOCKET;
     }
 
@@ -91,6 +58,7 @@ namespace Secretest
 
         Close();
         Socket_ = b.Socket_;
+        Address_ = b.Address_;
         b.Socket_ = INVALID_SOCKET;
 
         return *this;
@@ -122,8 +90,7 @@ namespace Secretest
         Close();
     }
 
-    ClientConnection::ClientConnection(SOCKET socket, Server& server) :
-        _server(&server)
+    ClientConnection::ClientConnection(SOCKET socket)
     {
         Socket_ = socket;
 
@@ -135,42 +102,15 @@ namespace Secretest
         Address_ = Address(address.sin_addr.S_un.S_addr, address.sin_port);
     }
 
+    bool ClientConnection::ReceiveData(std::span<uint8_t> buf, size_t& bytesWritten) const
+    {
+        bytesWritten = recv(Socket_, reinterpret_cast<char*>(buf.data()), buf.size_bytes(), 0);
+        return bytesWritten > 0;
+    }
+
     ClientConnection::~ClientConnection()
     {
         Close();
-    }
-
-    void ClientConnection::Listen()
-    {
-        _messageThread = std::thread([this]()
-        {
-            {
-                std::unique_lock l{_state};
-                _shouldClose = false;
-            }
-            char buf[SOCKET_BUF_LENGTH];
-            while(recv(Socket_, buf, sizeof(buf), 0) > 0 && !_shouldClose)
-            {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            }
-        });
-        _messageThread.detach();
-    }
-
-    void ClientConnection::Join()
-    {
-        {
-            std::unique_lock l{_state};
-            _shouldClose = true;
-        }
-        if(_messageThread.joinable())
-            _messageThread.join();
-    }
-
-    void ClientConnection::Close()
-    {
-        Join();
-        IConnection::Close();
     }
 
     Client::Client(Address address) : IConnection(address)
@@ -205,9 +145,72 @@ namespace Secretest
         }
     }
 
-    Server::~Server()
+    ClientConnection Server::Accept(Address address) const
     {
-        Close();
+        sockaddr_in hint{};
+        hint.sin_family = AF_INET;
+        hint.sin_port = address.Port;
+        hint.sin_addr.S_un.S_addr = address.IP;
+
+        static int hintLength = sizeof(sockaddr_in);
+
+        sockaddr* addr = address.IP ? reinterpret_cast<sockaddr*>(&hint) : nullptr;
+        int* addrSize = address.IP ? &hintLength : nullptr;
+
+        return ClientConnection(accept(Socket_, addr, addrSize));
+    }
+
+    void Server::OnConnection(ClientConnection& connection)
+    {
+        const std::string ip = static_cast<std::string>(connection.GetAddress());
+        MessageBoxA(nullptr, ip.c_str(), "Client Connected", MB_OK);
+    }
+
+    void Server::OnMessage(ClientConnection& connection, const std::span<uint8_t>& data)
+    {
+
+    }
+
+    void Server::OnDisconnect(ClientConnection& connection)
+    {
+        const std::string ip = static_cast<std::string>(connection.GetAddress());
+        MessageBoxA(nullptr, ip.c_str(), "Client Disconnected", MB_OK);
+    }
+
+
+    void Server::GetConnections()
+    {
+        std::unique_lock l{_state};
+
+        while(GetStatus(IConnectionStatusQueryType::Read) > 0)
+        {
+            ClientConnection incoming = Accept();
+            OnConnection(incoming);
+            _clients.push_back(std::move(incoming));
+        }
+    }
+
+    void Server::GetMessages(bool& requiresCleanup)
+    {
+        std::unique_lock l{_state};
+
+        std::array<uint8_t, SOCKET_BUF_SIZE> socketBuffer;
+
+        for(ClientConnection& client : _clients)
+        {
+            if(!client.GetStatus(IConnectionStatusQueryType::Read))
+                continue;
+
+            size_t bytesRead;
+            if(!client.ReceiveData(socketBuffer, bytesRead))
+            {
+                OnDisconnect(client);
+                client.Close();
+                continue;
+            }
+
+            OnMessage(client, std::span(socketBuffer.begin(), socketBuffer.begin() + bytesRead));
+        }
     }
 
     void Server::Listen()
@@ -223,15 +226,13 @@ namespace Secretest
             {
                 std::unique_lock l{_state};
 
-                std::unique_ptr<ClientConnection> incoming;
-                if(GetStatus(IConnectionStatusQueryType::Read) > 0 && ((incoming = Accept())))
-                {
-                    OnConnection(*incoming);
-                    incoming->Listen();
-                    _clients.push_back(std::move(incoming));
-                }
+                bool requiresCleanup;
 
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                GetConnections();
+                GetMessages(requiresCleanup);
+
+                if(requiresCleanup)
+                    std::erase_if(_clients, [](const ClientConnection& client){ return !client.IsOpen(); });
             }
         });
         _thread.detach();
@@ -244,8 +245,11 @@ namespace Secretest
             _shouldClose = true;
         }
 
-        for(const auto& client : _clients)
-            client->Join();
+        for(auto& client : _clients)
+            client.Close();
+
+        if(_thread.joinable())
+            _thread.join();
     }
 
     void Server::Close()
@@ -255,5 +259,10 @@ namespace Secretest
         _clients.clear();
 
         IConnection::Close();
+    }
+
+    Server::~Server()
+    {
+        Close();
     }
 }

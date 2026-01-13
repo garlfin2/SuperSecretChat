@@ -15,7 +15,7 @@ using WSAEVENT = void*;
 
 #define LOCALHOST 0x0100007F
 
-#define SOCKET_BUF_LENGTH 512
+#define SOCKET_BUF_SIZE 512
 
 namespace Secretest
 {
@@ -57,16 +57,16 @@ namespace Secretest
     {
     public:
         explicit IConnection(Address address);
-        IConnection() = default;
 
+        IConnection() = default;
         IConnection(const IConnection&) = delete;
         IConnection& operator=(const IConnection&) = delete;
-
         IConnection(IConnection&& b) noexcept;
         IConnection& operator=(IConnection&& b) noexcept;
 
         [[nodiscard]] Address GetAddress() const { return Address_; }
         [[nodiscard]] int32_t GetStatus(IConnectionStatusQueryType type) const;
+        [[nodiscard]] bool IsOpen() const { return Socket_; }
 
         void Close();
 
@@ -83,21 +83,18 @@ namespace Secretest
     class ClientConnection : public IConnection
     {
     public:
-        ClientConnection(SOCKET socket, Server& server);
+        ClientConnection() = default;
+        ClientConnection(ClientConnection&& b) noexcept = default;
+        ClientConnection& operator=(ClientConnection&& b) noexcept = default;
+
+        bool ReceiveData(std::span<uint8_t> buf, size_t& bytesWritten) const;
 
         friend class Server;
 
         ~ClientConnection();
 
     private:
-        void Listen();
-        void Join();
-        void Close();
-
-        std::thread _messageThread;
-        std::mutex _state;
-        Server* _server = nullptr;
-        volatile bool _shouldClose = false;
+        explicit ClientConnection(SOCKET socket);
     };
 
     class Server : public IConnection
@@ -114,14 +111,17 @@ namespace Secretest
         ~Server();
 
     protected:
-        std::unique_ptr<ClientConnection> Accept(Address address = {});
+        ClientConnection Accept(Address address = {}) const;
 
         virtual void OnConnection(ClientConnection& connection);
         virtual void OnDisconnect(ClientConnection& connection);
-        virtual void OnMessage(ClientConnection& connection, const std::vector<uint8_t>& data);
+        virtual void OnMessage(ClientConnection& connection, const std::span<uint8_t>& data);
 
     private:
-        std::list<std::unique_ptr<ClientConnection>> _clients;
+        void GetConnections();
+        void GetMessages(bool& requiresCleanup);
+
+        std::list<ClientConnection> _clients;
         std::mutex _state;
         std::thread _thread;
         volatile bool _shouldClose = false;
@@ -131,6 +131,10 @@ namespace Secretest
     class Client : public IConnection
     {
     public:
+        Client() = default;
+        Client(Client&& b) noexcept = default;
+        Client& operator=(Client&& b) noexcept = default;
+
         explicit Client(Address address);
     };
 }
