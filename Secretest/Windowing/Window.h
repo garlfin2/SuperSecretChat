@@ -17,16 +17,21 @@ using LRESULT = int64_t;
 
 namespace Secretest
 {
-    struct IWindowClass
+    struct IWindowType
     {
         std::string_view Class;
         long Flags;
     };
 
+    struct IWindowClass
+    {
+        std::string_view Name;
+    };
+
     class IWindow
     {
     public:
-        IWindow(IWindowClass windowClass, std::string_view name, uvec2 position, uvec2 size, const IWindow* parent = nullptr);
+        IWindow(IWindowType windowStyle, std::string_view name, uvec2 position, uvec2 size, const IWindow* parent = nullptr);
         virtual ~IWindow();
 
         IWindow(IWindow&&) = default;
@@ -45,6 +50,8 @@ namespace Secretest
         virtual void Paint() {};
         virtual void OnCommand() = 0;
 
+        static void RegisterStyle(const IWindowClass& windowClass);
+
         [[nodiscard]] HWND GetHWND() const { return _hwnd; }
 
     private:
@@ -61,12 +68,12 @@ namespace Secretest
     {
     public:
         IButton(std::string_view text, uvec2 pos, uvec2 size, FUNC_T&& func, const IWindow& window) :
-            IWindow({ "Button",  }, text, pos, size, &window),
+            IWindow({ "Button", 0 }, text, pos, size, &window),
             _func(std::move(func))
         {}
 
         IButton(std::string_view text, uvec2 pos, uvec2 size, const FUNC_T& func, const IWindow& window) :
-            IWindow(IWindowType::Button, text, pos, size, &window),
+            IWindow({ "Button", 0 }, text, pos, size, &window),
             _func(func)
         {}
 
@@ -74,6 +81,7 @@ namespace Secretest
         void OnCommand() override { _func(*this); }
 
     private:
+
         FUNC_T _func;
     };
 
@@ -82,10 +90,7 @@ namespace Secretest
     class TextField final : public IWindow
     {
     public:
-        TextField(uvec2 pos, uvec2 size, const IWindow& window, std::string_view defaultText = "") :
-            IWindow(IWindowType::TextBox, defaultText, pos, size, &window),
-            _text(defaultText)
-        {}
+        TextField(uvec2 pos, uvec2 size, const IWindow& window, std::string_view defaultText = "");
 
         [[nodiscard]] const std::string& GetText() const { return _text; }
 
@@ -99,15 +104,23 @@ namespace Secretest
     class Label final : public IWindow
     {
     public:
-        Label(const char* text, uvec2 pos, uvec2 size, const IWindow& window) :
-            IWindow(IWindowType::Label, text, pos, size, &window)
-        {}
+        Label(std::string_view text, uvec2 pos, uvec2 size, const IWindow& window);
 
-        void SetText(std::string_view text);
+        void SetText(std::string_view text) const;
 
     protected:
         void OnCommand() override {};
     };
 
-    class Window final :
+    class Window : public IWindow
+    {
+    public:
+        Window(std::string_view name, uvec2 position, uvec2 size);
+
+        void RepaintAll() const;
+
+    protected:
+        void Paint() override;
+        void OnCommand() override {};
+    };
 }

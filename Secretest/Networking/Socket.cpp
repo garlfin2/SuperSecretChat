@@ -246,12 +246,7 @@ namespace Secretest
 
     void Server::OnConnect(ClientConnection& connection)
     {
-        const std::string ip = static_cast<std::string>(connection.GetAddress());
-        MessageBoxA(nullptr, ip.c_str(), "Client Connected", MB_OK);
-
-        static std::string_view coolMessage = "Welcome to the server!";
-
-        connection.SendData(coolMessage);
+        bool _ = connection.SendData("Welcome to the server!");
     }
 
     void Server::OnMessage(ClientConnection& connection, std::span<const char> data)
@@ -261,8 +256,6 @@ namespace Secretest
 
     void Server::OnDisconnect(ClientConnection& connection)
     {
-        const std::string ip = static_cast<std::string>(connection.GetAddress());
-        MessageBoxA(nullptr, ip.c_str(), "Client Disconnected", MB_OK);
     }
 
     void Server::GetConnections()
@@ -272,32 +265,35 @@ namespace Secretest
         while(GetStatus(IConnectionStatusQueryType::Read) > 0)
         {
             ClientConnection incoming = Accept();
-            OnConnect(incoming);
             _clients.push_back(std::move(incoming));
+            OnConnect(_clients.back());
         }
     }
 
-    void Server::GetMessages(bool& requiresCleanup)
+    void Server::GetMessages()
     {
         std::unique_lock l{_state};
 
         std::array<char, SOCKET_BUF_SIZE> socketBuffer;
 
-        for(ClientConnection& client : _clients)
+        for(auto client = _clients.begin(); client != _clients.end();)
         {
-            if(!client.GetStatus(IConnectionStatusQueryType::Read))
+            if(!client->GetStatus(IConnectionStatusQueryType::Read))
                 continue;
 
             size_t bytesRead;
-            if(!client.IsOpen() || !client.ReceiveData(socketBuffer, bytesRead))
+            if(!client->IsOpen() || !client->ReceiveData(socketBuffer, bytesRead))
             {
-                requiresCleanup = true;
-                OnDisconnect(client);
-                client.Close();
+                ClientConnection toDelete = std::move(*client);
+                _clients.erase(client++);
+                toDelete.Close();
+                OnDisconnect(toDelete);
                 continue;
             }
 
-            OnMessage(client, std::span(socketBuffer.begin(), socketBuffer.begin() + bytesRead));
+            OnMessage(*client, std::span(socketBuffer.begin(), socketBuffer.begin() + bytesRead));
+
+            ++client;
         }
     }
 
@@ -314,13 +310,8 @@ namespace Secretest
             {
                 std::unique_lock l{_state};
 
-                bool requiresCleanup;
-
                 GetConnections();
-                GetMessages(requiresCleanup);
-
-                if(requiresCleanup)
-                    std::erase_if(_clients, [](const ClientConnection& client){ return !client.IsOpen(); });
+                GetMessages();
             }
         });
         _thread.detach();

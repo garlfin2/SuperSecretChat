@@ -7,7 +7,7 @@
 namespace Secretest
 {
     ClientWindow::ClientWindow(uvec2 size, Address address) :
-        IWindow(IWindowType::Window, "Secretest", uvec2(), size),
+        Window("Secretest", uvec2(), size),
         Client(address)
     {
         Listen();

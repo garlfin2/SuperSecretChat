@@ -107,7 +107,7 @@ namespace Secretest
         void Join();
         void Close() override;
 
-        friend class ClientConnection;
+        const std::list<ClientConnection>& GetClients() const { return _clients; }
 
         ~Server() override;
 
@@ -120,7 +120,7 @@ namespace Secretest
 
     private:
         void GetConnections();
-        void GetMessages(bool& requiresCleanup);
+        void GetMessages();
 
         std::list<ClientConnection> _clients;
         std::mutex _state;

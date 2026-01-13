@@ -9,7 +9,7 @@
 
 namespace Secretest
 {
-    class ClientWindow final: public IWindow, public Client
+    class ClientWindow final: public Window, public Client
     {
     public:
         explicit ClientWindow(uvec2 size = uvec2(1440, 720), Address address = {});

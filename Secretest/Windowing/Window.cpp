@@ -8,6 +8,8 @@
 #include <winuser.h>
 #include <unordered_map>
 
+#define TEXT_FIELD_FLAGS WS_BORDER | ES_LEFT | ES_AUTOHSCROLL | ES_MULTILINE
+
 namespace Secretest
 {
     LRESULT IWindow::WindowProc(HWND hwnd, UINT uMSG, WPARAM wParam, LPARAM lParam)
@@ -17,6 +19,13 @@ namespace Secretest
         return DefWindowProcA(hwnd, uMSG, wParam, lParam);
     }
 
+    TextField::TextField(uvec2 pos, uvec2 size, const IWindow& window, std::string_view defaultText):
+        IWindow(IWindowType{ "Edit",  TEXT_FIELD_FLAGS }, defaultText, pos, size, &window),
+        _text(defaultText)
+    {
+
+    }
+
     void TextField::OnCommand()
     {
         const int length = GetWindowTextLengthA(GetHWND());
@@ -24,38 +33,39 @@ namespace Secretest
         GetWindowTextA(GetHWND(), _text.data(), length + 1);
     }
 
-    void Label::SetText(std::string_view text)
+    Label::Label(std::string_view text, uvec2 pos, uvec2 size, const IWindow& window):
+        IWindow(IWindowType{ "Static", 0 }, text, pos, size, &window)
+    {
+
+    }
+
+    void Label::SetText(std::string_view text) const
     {
         SetWindowTextA(GetHWND(), text.data());
     }
 
-    std::string ToString(const IWindowType e)
+    Window::Window(std::string_view name, uvec2 position, uvec2 size) :
+        IWindow(IWindowType{ "Window", WS_OVERLAPPEDWINDOW }, name, position, size)
     {
-        static std::unordered_map<IWindowType, std::string> map
-        {
-            { IWindowType::Window, "Window" },
-            { IWindowType::Button, "Button" },
-            { IWindowType::Label, "Static" },
-            { IWindowType::TextBox, "Edit" }
-        };
 
-        return map[e];
     }
 
-    long ToInternalType(IWindowType e)
+    void Window::RepaintAll() const
     {
-        static std::unordered_map<IWindowType, long> map
-        {
-            { IWindowType::Window, WS_OVERLAPPEDWINDOW },
-            { IWindowType::Button, BS_FLAT },
-            { IWindowType::Label, 0 },
-            { IWindowType::TextBox, WS_BORDER | ES_LEFT | ES_AUTOHSCROLL | ES_MULTILINE }
-        };
-
-        return map[e];
+        RedrawWindow(GetHWND(), nullptr, nullptr, RDW_INTERNALPAINT);
     }
 
-    IWindow::IWindow(IWindowType type, std::string_view text, uvec2 position, uvec2 size, const IWindow* parent) :
+    void Window::Paint()
+    {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(GetHWND(), &ps);
+
+        FillRect(hdc, &ps.rcPaint, reinterpret_cast<HBRUSH>(COLOR_WINDOW));
+
+        EndPaint(GetHWND(), &ps);
+    }
+
+    IWindow::IWindow(IWindowType windowStyle, std::string_view text, uvec2 position, uvec2 size, const IWindow* parent) :
         _parent(parent),
         _size(size)
     {
@@ -63,12 +73,12 @@ namespace Secretest
 
         HINSTANCE hInstance = GetModuleHandle(nullptr);
 
-        DWORD style = WS_VISIBLE | ToInternalType(type);
+        DWORD style = WS_VISIBLE | windowStyle.Flags;
         if(_parent) style |= WS_CHILD;
 
         _hwnd = CreateWindowEx(
             0,
-            ToString(type).c_str(),
+            windowStyle.Class.data(),
             text.data(),
             style,
             position.x,
@@ -105,19 +115,17 @@ namespace Secretest
         static bool wasRegistered = false;
         if(wasRegistered) return;
 
-        RegisterStyle(IWindowType::Window, WindowClass{  });
+        RegisterStyle(IWindowClass{ "Window" });
 
         wasRegistered = true;
     }
 
-    void IWindow::RegisterStyle(const IWindowType type, const WindowClass& windowClass)
+    void IWindow::RegisterStyle(const IWindowClass& windowClass)
     {
         HINSTANCE hInstance = GetModuleHandle(nullptr);
 
-        const std::string& typeName = ToString(type);
-
         WNDCLASS wndclass{};
-        wndclass.lpszClassName = typeName.c_str();
+        wndclass.lpszClassName = windowClass.Name.data();
         wndclass.hInstance = hInstance;
         wndclass.lpfnWndProc = WindowProc;
 
