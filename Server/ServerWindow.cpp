@@ -4,6 +4,10 @@
 
 #include "ServerWindow.h"
 
+#include <sstream>
+
+using namespace std::string_view_literals;
+
 namespace Secretest
 {
     ServerWindow::ServerWindow(uvec2 size, uint16_t port) :
@@ -20,8 +24,7 @@ namespace Secretest
     {
         Server::OnConnect(connection);
 
-        connection.Send(StringToSpan("Welcome to the server!"));
-        connection.Send(StringToSpan("Welcome to the server2!"));
+        connection.Send("Welcome to the server!"sv);
 
         UpdateClientCountLabel();
     }
@@ -40,7 +43,7 @@ namespace Secretest
 
     void ServerWindow::SubmitMessageButton(IWindow& button)
     {
-        SendToClients(StringToSpan(_messageField.GetText()));
+        SendToClients(_messageField.GetText());
         _messageField.ClearText();
     }
 }

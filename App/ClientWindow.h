@@ -16,5 +16,10 @@ namespace Secretest
 
     protected:
         void OnCommand() override;
+        void OnMessage(std::span<const char> message) override;
+
+    private:
+        std::string _messages;
+        Label _messagesLabel;
     };
 }

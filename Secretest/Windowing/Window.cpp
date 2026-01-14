@@ -106,6 +106,35 @@ namespace Secretest
         _hwnd = nullptr;
     }
 
+    IWindow::IWindow(IWindow&& b) noexcept
+    {
+        _hwnd = b._hwnd;
+        b._hwnd = nullptr;
+
+        _size = b._size;
+        _parent = b._parent;
+
+        SetWindowLongPtr(_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+    }
+
+    IWindow& IWindow::operator=(IWindow&& b) noexcept
+    {
+        if(&b == this)
+            return *this;
+
+        this->~IWindow();
+
+        _hwnd = b._hwnd;
+        b._hwnd = nullptr;
+
+        _size = b._size;
+        _parent = b._parent;
+
+        SetWindowLongPtr(_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+
+        return *this;
+    }
+
     void IWindow::RunWindows()
     {
         MSG msg{};

@@ -34,8 +34,8 @@ namespace Secretest
         IWindow(IWindowType windowStyle, std::string_view name, uvec2 position, uvec2 size, const IWindow* parent = nullptr);
         virtual ~IWindow();
 
-        IWindow(IWindow&&) = default;
-        IWindow& operator=(IWindow&&) = default;
+        IWindow(IWindow&&) noexcept;
+        IWindow& operator=(IWindow&&) noexcept;
 
         IWindow(const IWindow&) = delete;
         IWindow& operator=(const IWindow&) = delete;
@@ -105,7 +105,7 @@ namespace Secretest
     public:
         TextField(uvec2 pos, uvec2 size, const IWindow& window, std::string_view defaultText = "");
 
-        [[nodiscard]] const std::string& GetText() const { return _text; }
+        [[nodiscard]] std::string_view GetText() const { return _text; }
         void SetText(std::string_view text);
         void ClearText() { SetText(""); }
 

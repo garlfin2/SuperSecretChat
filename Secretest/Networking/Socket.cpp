@@ -202,10 +202,7 @@ namespace Secretest
 
     }
 
-    void Client::OnMessage(std::span<const char> data)
-    {
-        MessageBoxA(nullptr, data.data(), "Message Received", MB_ICONINFORMATION);
-    }
+    void Client::OnMessage(std::span<const char> data) {}
 
     Client::~Client()
     {

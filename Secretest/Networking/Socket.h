@@ -21,13 +21,6 @@ using WSAEVENT = void*;
 
 namespace Secretest
 {
-    template<size_t STR_LEN>
-    constexpr std::span<const char> StringToSpan(const char(& str)[STR_LEN]) { return { str, str + STR_LEN }; }
-    inline std::span<const char> StringToSpan(const char* str) { return { str, str + strlen(str) + 1 }; }
-    constexpr std::span<const char> StringToSpan(std::string_view str) { return { str.begin(), str.end() + 1 }; }
-    constexpr std::span<const char> StringToSpan(const std::string& str) { return { str.begin(), str.end() + 1 }; }
-    constexpr std::span<char> StringToSpan(std::string& str) { return { str.begin(), str.end() + 1 }; }
-
     class SocketContext
     {
     public:
