@@ -10,6 +10,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <print>
+#include <bits/ranges_algo.h>
 
 namespace Secretest
 {
@@ -102,18 +103,30 @@ namespace Secretest
         Address_ = Address(address.sin_addr.S_un.S_addr, address.sin_port);
     }
 
-    bool ClientConnection::ReceiveData(std::span<char> buf, size_t& bytesWritten) const
+    bool IOConnection::Receive(std::vector<char>& buf) const
     {
-        bytesWritten = recv(Socket_, buf.data(), buf.size_bytes(), 0);
-        return bytesWritten > 0;
+        size_t packetSize;
+        bool isOpen = recv(Socket_, reinterpret_cast<char*>(&packetSize), sizeof(packetSize), MSG_WAITALL) > 0;
+
+        if(!isOpen) return false;
+
+        buf.resize(packetSize);
+
+        if(packetSize == 0) return true;
+
+        isOpen = recv(Socket_, buf.data(), packetSize, MSG_WAITALL) > 0;
+
+        return isOpen;
     }
 
-    bool ClientConnection::SendData(std::span<const char> buf) const
+    bool IOConnection::Send(std::span<const char> buf) const
     {
-        return send(Socket_, buf.data(), buf.size_bytes(), 0) > 0;
+        const size_t packetSize = buf.size_bytes();
+        return send(Socket_, reinterpret_cast<const char*>(&packetSize), sizeof(packetSize), 0) > 0 &&
+               send(Socket_, buf.data(), buf.size_bytes(), 0) > 0;
     }
 
-    Client::Client(Address address) : IConnection(address)
+    Client::Client(Address address) : IOConnection(address)
     {
         sockaddr_in hint{};
         hint.sin_family = AF_INET;
@@ -136,25 +149,27 @@ namespace Secretest
                 _shouldClose = false;
             }
 
-            std::array<char, SOCKET_BUF_SIZE> socketBuffer;
+            std::vector<char> socketBuffer;
 
-            while(!_shouldClose)
+            volatile bool close;
+            do
             {
                 std::unique_lock l{_state};
+
+                close = _shouldClose;
 
                 if(!GetStatus(IConnectionStatusQueryType::Read))
                     continue;
 
-                size_t bytesRead;
-                if(!IsOpen() || !ReceiveData(socketBuffer, bytesRead))
+                if(!IsOpen() || !Receive(socketBuffer))
                 {
                     OnDisconnect();
                     Close();
                     return;
                 }
 
-                OnMessage(std::span(socketBuffer.begin(), socketBuffer.begin() + bytesRead));
-            }
+                OnMessage(socketBuffer);
+            } while (!close);
         });
         _thread.detach();
     }
@@ -177,11 +192,6 @@ namespace Secretest
         IConnection::Close();
     }
 
-    bool Client::SendData(std::span<const char> buf) const
-    {
-        return send(Socket_, buf.data(), buf.size_bytes(), 0) > 0;
-    }
-
     void Client::OnConnect()
     {
 
@@ -195,12 +205,6 @@ namespace Secretest
     void Client::OnMessage(std::span<const char> data)
     {
         MessageBoxA(nullptr, data.data(), "Message Received", MB_ICONINFORMATION);
-    }
-
-    bool Client::ReceiveData(std::span<char> buf, size_t& bytesWritten) const
-    {
-        bytesWritten = recv(Socket_, buf.data(), buf.size_bytes(), 0);
-        return bytesWritten > 0;
     }
 
     Client::~Client()
@@ -244,24 +248,34 @@ namespace Secretest
         return ClientConnection(accept(Socket_, addr, addrSize));
     }
 
-    void Server::OnConnect(ClientConnection& connection)
+    void Server::OnConnect(ClientConnection& connection) {}
+
+    void Server::OnMessage(ClientConnection& connection, std::span<const char> data) {}
+
+    void Server::OnDisconnect(Address address) {}
+
+    void Server::SendToClients(std::span<const char> message) const
     {
-        bool _ = connection.SendData("Welcome to the server!");
+        for(auto& client : _clients)
+            client.Send(message);
     }
 
-    void Server::OnMessage(ClientConnection& connection, std::span<const char> data)
+    void Server::SendToClientsExcept(std::span<const char> message, std::span<Address> except) const
     {
-
+        for(auto& client : _clients)
+            if(!std::ranges::contains(except, client.GetAddress()))
+                client.Send(message);
     }
 
-    void Server::OnDisconnect(ClientConnection& connection)
+    void Server::SendToClientsExcept(std::span<const char> message, std::span<ClientConnection*> except) const
     {
+        for(auto& client : _clients)
+            if(!std::ranges::contains(except, &client))
+                client.Send(message);
     }
 
     void Server::GetConnections()
     {
-        std::unique_lock l{_state};
-
         while(GetStatus(IConnectionStatusQueryType::Read) > 0)
         {
             ClientConnection incoming = Accept();
@@ -272,26 +286,23 @@ namespace Secretest
 
     void Server::GetMessages()
     {
-        std::unique_lock l{_state};
-
-        std::array<char, SOCKET_BUF_SIZE> socketBuffer;
+        std::vector<char> socketBuffer;
 
         for(auto client = _clients.begin(); client != _clients.end();)
         {
             if(!client->GetStatus(IConnectionStatusQueryType::Read))
                 continue;
 
-            size_t bytesRead;
-            if(!client->IsOpen() || !client->ReceiveData(socketBuffer, bytesRead))
+            if(!client->IsOpen() || !client->Receive(socketBuffer))
             {
-                ClientConnection toDelete = std::move(*client);
+                const Address deleted = client->GetAddress();
+                client->Close();
                 _clients.erase(client++);
-                toDelete.Close();
-                OnDisconnect(toDelete);
+                OnDisconnect(deleted);
                 continue;
             }
 
-            OnMessage(*client, std::span(socketBuffer.begin(), socketBuffer.begin() + bytesRead));
+            OnMessage(*client, socketBuffer);
 
             ++client;
         }
@@ -306,13 +317,16 @@ namespace Secretest
                 _shouldClose = false;
             }
 
-            while(!_shouldClose)
+            volatile bool close;
+            do
             {
                 std::unique_lock l{_state};
 
+                close = _shouldClose;
+
                 GetConnections();
                 GetMessages();
-            }
+            } while(!close);
         });
         _thread.detach();
     }
@@ -324,11 +338,11 @@ namespace Secretest
             _shouldClose = true;
         }
 
-        for(auto& client : _clients)
-            client.Close();
-
         if(_thread.joinable())
             _thread.join();
+
+        for(auto& client : _clients)
+            client.Close();
     }
 
     void Server::Close()

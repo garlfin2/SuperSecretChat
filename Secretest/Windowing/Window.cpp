@@ -26,6 +26,12 @@ namespace Secretest
 
     }
 
+    void TextField::SetText(std::string_view text)
+    {
+        SetWindowTextA(GetHWND(), text.data());
+        _text = text;
+    }
+
     void TextField::OnCommand()
     {
         const int length = GetWindowTextLengthA(GetHWND());

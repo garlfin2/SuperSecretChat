@@ -63,29 +63,42 @@ namespace Secretest
         u16vec2 _size;
     };
 
-    template<typename FUNC_T> requires requires(FUNC_T f, IWindow& b) { { f(b) }; }
+    template<class FUNC_T>
+    concept IsButtonFunction = requires(FUNC_T f, IWindow& b) { { f(b) }; };
+
+    template<typename FUNC_T> requires IsButtonFunction<FUNC_T>
     class IButton final : public IWindow
     {
     public:
-        IButton(std::string_view text, uvec2 pos, uvec2 size, FUNC_T&& func, const IWindow& window) :
+        template<typename... ARGS>
+        IButton(std::string_view text, uvec2 pos, uvec2 size, const IWindow& window, ARGS&&... args) :
             IWindow({ "Button", 0 }, text, pos, size, &window),
-            _func(std::move(func))
-        {}
-
-        IButton(std::string_view text, uvec2 pos, uvec2 size, const FUNC_T& func, const IWindow& window) :
-            IWindow({ "Button", 0 }, text, pos, size, &window),
-            _func(func)
+            _func(std::forward<ARGS>(args)...)
         {}
 
     protected:
         void OnCommand() override { _func(*this); }
 
     private:
-
         FUNC_T _func;
     };
 
+    template<typename DELEGATE_T, typename FUNC_T>
+    concept IsDelegateFunction = requires(FUNC_T f, DELEGATE_T* d, IWindow& b) { { f(d, b) }; };
+
+    template<typename DELEGATE_T, typename FUNC_T = std::function<void(DELEGATE_T* d, IWindow& w)>> requires IsDelegateFunction<DELEGATE_T, FUNC_T>
+    struct Delegate
+    {
+        DELEGATE_T* T;
+        FUNC_T Function;
+
+        void operator()(IWindow& window) { Function(T, window); }
+    };
+
     using Button = IButton<std::function<void(IWindow&)>>;
+
+    template<typename DELEGATE_T, typename FUNC_T = std::function<void(DELEGATE_T* d, IWindow& w)>>
+    using DelegateButton = IButton<Delegate<DELEGATE_T, FUNC_T>>;
 
     class TextField final : public IWindow
     {
@@ -93,6 +106,8 @@ namespace Secretest
         TextField(uvec2 pos, uvec2 size, const IWindow& window, std::string_view defaultText = "");
 
         [[nodiscard]] const std::string& GetText() const { return _text; }
+        void SetText(std::string_view text);
+        void ClearText() { SetText(""); }
 
     protected:
         void OnCommand() override;

@@ -16,11 +16,15 @@ namespace Secretest
 
     protected:
         void OnConnect(ClientConnection& connection) override;
-        void OnDisconnect(ClientConnection& connection) override;
+        void OnDisconnect(Address address) override;
 
     private:
         void UpdateClientCountLabel() const;
 
+        void SubmitMessageButton(IWindow& button);
+
         Label _connectionCountLabel;
+        TextField _messageField;
+        DelegateButton<ServerWindow> _submitMessageButton;
     };
 }

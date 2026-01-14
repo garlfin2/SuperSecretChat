@@ -5,6 +5,8 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
+#include <istream>
 #include <list>
 #include <mutex>
 #include <vector>
@@ -19,6 +21,13 @@ using WSAEVENT = void*;
 
 namespace Secretest
 {
+    template<size_t STR_LEN>
+    constexpr std::span<const char> StringToSpan(const char(& str)[STR_LEN]) { return { str, str + STR_LEN }; }
+    inline std::span<const char> StringToSpan(const char* str) { return { str, str + strlen(str) + 1 }; }
+    constexpr std::span<const char> StringToSpan(std::string_view str) { return { str.begin(), str.end() + 1 }; }
+    constexpr std::span<const char> StringToSpan(const std::string& str) { return { str.begin(), str.end() + 1 }; }
+    constexpr std::span<char> StringToSpan(std::string& str) { return { str.begin(), str.end() + 1 }; }
+
     class SocketContext
     {
     public:
@@ -44,6 +53,8 @@ namespace Secretest
         };
 
         uint16_t Port;
+
+        bool operator==(const Address& b) const { return Port == b.Port && IP == b.IP; }
     };
 
     enum class IConnectionStatusQueryType
@@ -79,18 +90,26 @@ namespace Secretest
         Address Address_ = {};
     };
 
-    class Server;
+    class IOConnection : public IConnection
+    {
+    public:
+        IOConnection() = default;
+        IOConnection(IOConnection&& b) noexcept = default;
+        IOConnection& operator=(IOConnection&& b) noexcept = default;
+
+        explicit IOConnection(Address address) : IConnection(address) {};
+
+        bool Receive(std::vector<char>& buf) const;
+        bool Send(std::span<const char> buf) const;
+    };
 
     // Server to client connection
-    class ClientConnection : public IConnection
+    class ClientConnection : public IOConnection
     {
     public:
         ClientConnection() = default;
         ClientConnection(ClientConnection&& b) noexcept = default;
         ClientConnection& operator=(ClientConnection&& b) noexcept = default;
-
-        bool ReceiveData(std::span<char> buf, size_t& bytesWritten) const;
-        bool SendData(std::span<const char> buf) const;
 
         friend class Server;
 
@@ -115,8 +134,12 @@ namespace Secretest
         ClientConnection Accept(Address address = {}) const;
 
         virtual void OnConnect(ClientConnection& connection);
-        virtual void OnDisconnect(ClientConnection& connection);
-        virtual void OnMessage(ClientConnection& connection, std::span<const char> data);
+        virtual void OnDisconnect(Address address);
+        virtual void OnMessage(ClientConnection& connection, std::span<const char> message);
+
+        void SendToClients(std::span<const char> message) const;
+        void SendToClientsExcept(std::span<const char>, std::span<Address> except) const;
+        void SendToClientsExcept(std::span<const char>, std::span<ClientConnection*> except) const;
 
     private:
         void GetConnections();
@@ -129,7 +152,7 @@ namespace Secretest
     };
 
     // Client to server connection
-    class Client : public IConnection
+    class Client : public IOConnection
     {
     public:
         explicit Client(Address address);
@@ -138,15 +161,12 @@ namespace Secretest
         void Join();
         void Close() override;
 
-        bool ReceiveData(std::span<char> buf, size_t& bytesWritten) const;
-        bool SendData(std::span<const char> buf) const;
-
         ~Client() override;
 
     protected:
         virtual void OnConnect();
         virtual void OnDisconnect();
-        virtual void OnMessage(std::span<const char> data);
+        virtual void OnMessage(std::span<const char> message);
 
     private:
         std::mutex _state;
