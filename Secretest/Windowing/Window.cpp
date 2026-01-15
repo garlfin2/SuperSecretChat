@@ -53,7 +53,6 @@ namespace Secretest
     Window::Window(std::string_view name, uvec2 position, uvec2 size) :
         IWindow(IWindowType{ "Window", WS_OVERLAPPEDWINDOW }, name, position, size)
     {
-
     }
 
     void Window::RepaintAll() const
@@ -135,11 +134,20 @@ namespace Secretest
         return *this;
     }
 
+    TaskQueue IWindow::Tasks = {};
+
     void IWindow::RunWindows()
     {
         MSG msg{};
-        while (GetMessage(&msg, nullptr, 0, 0) > 0)
+        bool msgResult = false;
+        while (Tasks.HasTasks() || ((msgResult = GetMessageA(&msg, nullptr, 0, 0))))
         {
+            if(Tasks.HasTasks())
+                Tasks.RunAllTasks();
+
+            if(!msgResult)
+                continue;
+
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }

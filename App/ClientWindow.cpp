@@ -8,8 +8,7 @@ namespace Secretest
 {
     ClientWindow::ClientWindow(uvec2 size, Address address) :
         Window("Secretest", uvec2(), size),
-        Client(address),
-        _messagesLabel("", uvec2(32), uvec2(512), *this)
+        Client(address)
     {
         Listen();
     }
@@ -19,12 +18,15 @@ namespace Secretest
 
     }
 
+    void ClientWindow::PushMessage(const std::string& str)
+    {
+        _messages.emplace_back(str, _messagePosition, uvec2(512, 32), *this);
+        _messagePosition.y += 32;
+    }
+
     void ClientWindow::OnMessage(std::span<const char> message)
     {
+        Tasks.Emplace(&ClientWindow::PushMessage, this, std::string(message.begin(), message.end()));
         Client::OnMessage(message);
-
-        _messages += static_cast<std::string_view>(message);
-        _messages += '\n';
-        _messagesLabel.SetText(_messages);
     }
 }

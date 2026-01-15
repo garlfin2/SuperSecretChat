@@ -4,14 +4,14 @@
 
 #pragma once
 
+#include "Threading.h"
+
 #include <Secretest/Utility/vec2.h>
 #include <functional>
 #include <string>
 #include <thread>
-#include <print>
 
-struct HWND__;
-using HWND = HWND__*;
+using HWND = class HWND__*;
 using ATOM = uint16_t;
 using LRESULT = int64_t;
 
@@ -51,6 +51,7 @@ namespace Secretest
         virtual void OnCommand() = 0;
 
         static void RegisterStyle(const IWindowClass& windowClass);
+        static TaskQueue Tasks;
 
         [[nodiscard]] HWND GetHWND() const { return _hwnd; }
 
@@ -83,11 +84,13 @@ namespace Secretest
         FUNC_T _func;
     };
 
-    template<typename DELEGATE_T, typename FUNC_T>
-    concept IsDelegateFunction = requires(FUNC_T f, DELEGATE_T* d, IWindow& b) { { f(d, b) }; };
+    using Button = IButton<std::function<void(IWindow&)>>;
 
-    template<typename DELEGATE_T, typename FUNC_T = std::function<void(DELEGATE_T* d, IWindow& w)>> requires IsDelegateFunction<DELEGATE_T, FUNC_T>
-    struct Delegate
+    template<typename DELEGATE_T, typename FUNC_T>
+    concept IsButtonDelegate = requires(FUNC_T f, DELEGATE_T* d, IWindow& b) { { f(d, b) }; };
+
+    template<typename DELEGATE_T, typename FUNC_T = std::function<void(DELEGATE_T* d, IWindow& w)>> requires IsButtonDelegate<DELEGATE_T, FUNC_T>
+    struct ButtonDelegate
     {
         DELEGATE_T* T;
         FUNC_T Function;
@@ -95,10 +98,8 @@ namespace Secretest
         void operator()(IWindow& window) { Function(T, window); }
     };
 
-    using Button = IButton<std::function<void(IWindow&)>>;
-
     template<typename DELEGATE_T, typename FUNC_T = std::function<void(DELEGATE_T* d, IWindow& w)>>
-    using DelegateButton = IButton<Delegate<DELEGATE_T, FUNC_T>>;
+    using DelegateButton = IButton<ButtonDelegate<DELEGATE_T, FUNC_T>>;
 
     class TextField final : public IWindow
     {

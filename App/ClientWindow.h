@@ -16,10 +16,11 @@ namespace Secretest
 
     protected:
         void OnCommand() override;
+        void PushMessage(const std::string& str);
         void OnMessage(std::span<const char> message) override;
 
     private:
-        std::string _messages;
-        Label _messagesLabel;
+        std::list<Label> _messages;
+        uvec2 _messagePosition{ 32, 32 };
     };
 }
