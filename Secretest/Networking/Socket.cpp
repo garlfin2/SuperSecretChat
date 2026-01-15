@@ -12,6 +12,8 @@
 #include <print>
 #include <bits/ranges_algo.h>
 
+using namespace std::string_view_literals;
+
 namespace Secretest
 {
     SocketContext::SocketContext(uint16_t maxConnections)
@@ -39,10 +41,7 @@ namespace Secretest
     {
         Socket_ = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         if(Socket_ == InvalidSocket)
-        {
-            MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Socket Creation Error", MB_ICONERROR);
-            return;
-        }
+            throw ConnectionCreationException();
     }
 
     IConnection::IConnection(IConnection&& b) noexcept
@@ -105,58 +104,107 @@ namespace Secretest
 
     bool IOConnection::Receive(std::vector<char>& buf) const
     {
-        size_t packetSize;
-        bool isOpen = recv(Socket_, reinterpret_cast<char*>(&packetSize), sizeof(packetSize), MSG_WAITALL) > 0;
+        MessageHeader header;
+        bool isOpen = recv(Socket_, reinterpret_cast<char*>(&header), sizeof(header), MSG_WAITALL) > 0;
 
-        if(!isOpen) return false;
+        if(!isOpen || !header.IsValid()) return false;
 
-        buf.resize(packetSize);
+        buf.resize(header.Size);
 
-        if(packetSize == 0) return true;
-
-        isOpen = recv(Socket_, buf.data(), packetSize, MSG_WAITALL) > 0;
+        isOpen = recv(Socket_, buf.data(), header.Size, MSG_WAITALL) > 0;
 
         return isOpen;
     }
 
     bool IOConnection::Send(std::span<const char> buf) const
     {
-        const size_t packetSize = buf.size_bytes();
-        return send(Socket_, reinterpret_cast<const char*>(&packetSize), sizeof(packetSize), 0) > 0 &&
+        if(buf.size_bytes() == 0)
+            return true;
+
+        const MessageHeader header(buf.size_bytes());
+
+        return send(Socket_, reinterpret_cast<const char*>(&header), sizeof(header), 0) > 0 &&
                send(Socket_, buf.data(), buf.size_bytes(), 0) > 0;
     }
 
     Client::Client(Address address) : IOConnection(address)
     {
+    }
+
+    void Client::ConnectAsync(uint8_t retryCount, std::chrono::duration<float> retryTime)
+    {
+        if(IsConnected())
+            return;
+
+        retryCount = std::max<uint8_t>(retryCount, 1);
+
+        std::thread([=, this]()
+        {
+            for(uint8_t retry = 0; retry < retryCount; retry++)
+            {
+                InternalConnect();
+                if(IsConnected())
+                    break;
+                std::this_thread::sleep_for(retryTime);
+            }
+
+            if(!IsConnected())
+                return OnConnectFailure();
+            Listen();
+        }).detach();
+    }
+
+    bool Client::Connect()
+    {
+        const bool result = InternalConnect();
+
+        if(result)
+            Listen();
+        else
+            OnConnectFailure();
+
+        return result;
+    }
+
+    bool Client::InternalConnect()
+    {
+        if(_isConnected)
+            return true;
+
         sockaddr_in hint{};
         hint.sin_family = AF_INET;
         hint.sin_port = GetAddress().Port;
         hint.sin_addr.S_un.S_addr = GetAddress().IP;
 
-        if(connect(Socket_, reinterpret_cast<const sockaddr*>(&hint), sizeof(sockaddr_in)) == SOCKET_ERROR)
-        {
-            MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Connection Error", MB_ICONERROR);
-            return;
-        }
+        _isConnected = connect(Socket_, reinterpret_cast<const sockaddr*>(&hint), sizeof(sockaddr_in)) != SOCKET_ERROR;
+
+        if(_isConnected)
+            OnConnect();
+
+        return _isConnected;
     }
 
     void Client::Listen()
     {
+        if(_isListening)
+            return;
+
         _thread = std::thread([this]()
         {
             {
                 std::unique_lock l{_state};
-                _shouldClose = false;
+                _isListening = true;
             }
 
             std::vector<char> socketBuffer;
 
-            volatile bool close;
+            bool isListening;
             do
             {
-                std::unique_lock l{_state};
-
-                close = _shouldClose;
+                {
+                    std::unique_lock l{_state};
+                    isListening = !_isListening;
+                }
 
                 if(!GetStatus(IConnectionStatusQueryType::Read))
                     continue;
@@ -169,7 +217,7 @@ namespace Secretest
                 }
 
                 OnMessage(socketBuffer);
-            } while (!close);
+            } while (isListening);
         });
         _thread.detach();
     }
@@ -178,7 +226,7 @@ namespace Secretest
     {
         {
             std::scoped_lock lock{ _state };
-            _shouldClose = true;
+            _isListening = false;
         }
 
         if(_thread.joinable())
@@ -191,18 +239,6 @@ namespace Secretest
 
         IConnection::Close();
     }
-
-    void Client::OnConnect()
-    {
-
-    }
-
-    void Client::OnDisconnect()
-    {
-
-    }
-
-    void Client::OnMessage(std::span<const char> data) {}
 
     Client::~Client()
     {
@@ -217,17 +253,11 @@ namespace Secretest
         hint.sin_port = GetAddress().Port;
         hint.sin_addr.S_un.S_addr = GetAddress().IP;
 
-        if(bind(Socket_, reinterpret_cast<const sockaddr*>(&hint), sizeof(sockaddr_in)) == SOCKET_ERROR)
-        {
-            MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Binding Error", MB_ICONERROR);
-            return;
-        }
+        if(int err = bind(Socket_, reinterpret_cast<const sockaddr*>(&hint), sizeof(sockaddr_in)); err == SOCKET_ERROR)
+            throw ServerCreationException(std::format("Failed to listen on socket; is there a server already listening? Code: {}", err));
 
-        if(listen(Socket_, SOMAXCONN) == SOCKET_ERROR)
-        {
-            MessageBox(nullptr, std::format("Error code {}", WSAGetLastError()).c_str(), "Listening Error", MB_ICONERROR);
-            return;
-        }
+        if(int err = listen(Socket_, SOMAXCONN); err == SOCKET_ERROR)
+            throw ServerCreationException(std::format("Failed to start listening on socket. Code: {}", err));
     }
 
     ClientConnection Server::Accept(Address address) const

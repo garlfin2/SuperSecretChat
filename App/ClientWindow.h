@@ -18,6 +18,7 @@ namespace Secretest
         void OnCommand() override;
         void PushMessage(const std::string& str);
         void OnMessage(std::span<const char> message) override;
+        void OnConnectFailure() override;
 
     private:
         std::list<Label> _messages;

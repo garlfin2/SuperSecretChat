@@ -4,13 +4,15 @@
 
 #include "ClientWindow.h"
 
+#include <windows.h>
+
 namespace Secretest
 {
     ClientWindow::ClientWindow(uvec2 size, Address address) :
         Window("Secretest", uvec2(), size),
         Client(address)
     {
-        Listen();
+        ConnectAsync(3, std::chrono::duration<float>(1.f));
     }
 
     void ClientWindow::OnCommand()
@@ -28,5 +30,12 @@ namespace Secretest
     {
         Tasks.Emplace(&ClientWindow::PushMessage, this, std::string(message.begin(), message.end()));
         Client::OnMessage(message);
+    }
+
+    void ClientWindow::OnConnectFailure()
+    {
+        Client::OnConnectFailure();
+
+        MessageBoxA(GetHWND(), "Failed to connect to server.", "Connection Failure", MB_ICONERROR);
     }
 }

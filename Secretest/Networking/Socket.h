@@ -47,6 +47,7 @@ namespace Secretest
 
         uint16_t Port;
 
+
         bool operator==(const Address& b) const { return Port == b.Port && IP == b.IP; }
     };
 
@@ -58,6 +59,12 @@ namespace Secretest
     };
 
     constexpr uint64_t InvalidSocket = ~0;
+
+    class ConnectionCreationException : public std::exception
+    {
+    public:
+        const char* what() const noexcept override { return "Failed to create socket."; }
+    };
 
     class IConnection
     {
@@ -96,8 +103,31 @@ namespace Secretest
         bool Send(std::span<const char> buf) const;
     };
 
+    struct MessageHeader
+    {
+        MessageHeader() = default;
+        explicit MessageHeader(size_t size) : SizeChecksum(CalculateChecksum(size)), Size(size) {};
+
+        [[nodiscard]] bool IsValid() const
+        {
+            return SizeChecksum == CalculateChecksum(Size) &&
+                   Size > 0 &&
+                   Magic == MagicValue;
+        }
+
+        std::array<char, 3> Magic = MagicValue;
+        uint8_t SizeChecksum = UINT8_MAX;
+        size_t Size = SIZE_MAX;
+
+    private:
+        static constexpr uint8_t CalculateChecksum(size_t size) { return size % UINT8_MAX; }
+        static constexpr std::array<char, 3> MagicValue { 'S', 'C', 'K' };
+    };
+
+    class InvalidHeaderException final : public std::exception {};
+
     // Server to client connection
-    class ClientConnection : public IOConnection
+    class ClientConnection final : public IOConnection
     {
     public:
         ClientConnection() = default;
@@ -110,6 +140,17 @@ namespace Secretest
         explicit ClientConnection(SOCKET socket);
     };
 
+    class ServerCreationException : public std::exception
+    {
+    public:
+        explicit ServerCreationException(const std::string& what) noexcept : What(what) {};
+        explicit ServerCreationException(std::string&& what) noexcept : What(std::move(what)) {};
+        explicit ServerCreationException(std::string_view what) noexcept : What(what) {};
+
+        const char* what() const noexcept override { return What.c_str(); }
+
+        std::string What;
+    };
     class Server : public IConnection
     {
     public:
@@ -124,7 +165,7 @@ namespace Secretest
         ~Server() override;
 
     protected:
-        ClientConnection Accept(Address address = {}) const;
+        [[nodiscard]] ClientConnection Accept(Address address = {}) const;
 
         virtual void OnConnect(ClientConnection& connection);
         virtual void OnDisconnect(Address address);
@@ -150,20 +191,33 @@ namespace Secretest
     public:
         explicit Client(Address address);
 
+        // Better hope this returns before the object is deleted.
+        // Automatically listens when connected.
+        void ConnectAsync(uint8_t retryCount, std::chrono::duration<float> retryTime = std::chrono::seconds(1));
+
+        bool Connect();
         void Listen();
+
+        // Joins thread.
         void Join();
         void Close() override;
+
+        [[nodiscard]] bool IsConnected() const { return _isConnected; }
 
         ~Client() override;
 
     protected:
-        virtual void OnConnect();
-        virtual void OnDisconnect();
-        virtual void OnMessage(std::span<const char> message);
+        virtual void OnConnect() {};
+        virtual void OnDisconnect() {};
+        virtual void OnConnectFailure() {};
+        virtual void OnMessage(std::span<const char> message) {};
 
     private:
+        bool InternalConnect();
+
         std::mutex _state;
         std::thread _thread;
-        volatile bool _shouldClose = false;
+        volatile bool _isListening = false;
+        bool _isConnected = false;
     };
 }

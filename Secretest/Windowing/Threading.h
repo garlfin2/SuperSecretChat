@@ -54,17 +54,6 @@ namespace Secretest
             _queue.push_back(std::make_unique<Task<FUNC_T, ARGS...>>(std::forward<FUNC_T>(func), std::forward<ARGS>(args)...));
         }
 
-        void RunFirstTask()
-        {
-            std::unique_lock lock(_mutex);
-
-            if(_queue.empty())
-                return;
-
-            _queue.front()->operator()();
-            _queue.pop_front();
-        }
-
         void RunAllTasks()
         {
             std::unique_lock lock(_mutex);
