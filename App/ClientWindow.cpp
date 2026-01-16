@@ -28,8 +28,8 @@ namespace Secretest
 
     void ClientWindow::OnMessage(std::span<const char> message)
     {
-        Tasks.Emplace(&ClientWindow::PushMessage, this, std::string(message.begin(), message.end()));
         Client::OnMessage(message);
+        Tasks.Emplace(&ClientWindow::PushMessage, this, std::string(message.begin(), message.end()));
     }
 
     void ClientWindow::OnConnectFailure()

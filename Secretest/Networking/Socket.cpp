@@ -107,6 +107,8 @@ namespace Secretest
         MessageHeader header;
         bool isOpen = recv(Socket_, reinterpret_cast<char*>(&header), sizeof(header), MSG_WAITALL) > 0;
 
+        std::println("Received Packet: Size {}", header.Size);
+
         if(!isOpen || !header.IsValid()) return false;
 
         buf.resize(header.Size);
@@ -142,6 +144,7 @@ namespace Secretest
         {
             for(uint8_t retry = 0; retry < retryCount; retry++)
             {
+                OnConnectAttempt(retry);
                 InternalConnect();
                 if(IsConnected())
                     break;
@@ -203,7 +206,7 @@ namespace Secretest
             {
                 {
                     std::unique_lock l{_state};
-                    isListening = !_isListening;
+                    isListening = _isListening;
                 }
 
                 if(!GetStatus(IConnectionStatusQueryType::Read))
@@ -218,6 +221,8 @@ namespace Secretest
 
                 OnMessage(socketBuffer);
             } while (isListening);
+
+            std::println("Listening thread exited.");
         });
         _thread.detach();
     }

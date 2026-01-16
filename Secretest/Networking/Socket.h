@@ -6,7 +6,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <istream>
+#include <print>
 #include <list>
 #include <mutex>
 #include <vector>
@@ -207,10 +207,11 @@ namespace Secretest
         ~Client() override;
 
     protected:
-        virtual void OnConnect() {};
-        virtual void OnDisconnect() {};
-        virtual void OnConnectFailure() {};
+        virtual void OnConnect() { std::println("Connected to server."); };
+        virtual void OnDisconnect() { std::println("Disconnected from server."); };
+        virtual void OnConnectFailure() { std::println("Failed to connect to server."); };
         virtual void OnMessage(std::span<const char> message) {};
+        virtual void OnConnectAttempt(uint8_t attempt) { std::println("Attempting to connect to server. Attempt: {}", static_cast<uint32_t>(attempt)); }
 
     private:
         bool InternalConnect();

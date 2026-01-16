@@ -9,6 +9,7 @@
 #include <utility>
 #include <memory>
 #include <mutex>
+#include <print>
 
 namespace Secretest
 {
@@ -58,15 +59,17 @@ namespace Secretest
         {
             std::unique_lock lock(_mutex);
 
-            if(_queue.empty())
-                return;
-
             for(const auto& item : _queue)
                 item->operator()();
+
             _queue.clear();
         }
 
-        [[nodiscard]] bool HasTasks() const { return !_queue.empty(); }
+        [[nodiscard]] bool HasTasks()
+        {
+            std::unique_lock lock(_mutex);
+            return !_queue.empty();
+        }
 
     private:
         std::mutex _mutex;

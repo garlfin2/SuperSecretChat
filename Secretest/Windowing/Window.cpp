@@ -139,14 +139,9 @@ namespace Secretest
     void IWindow::RunWindows()
     {
         MSG msg{};
-        bool msgResult = false;
-        while (Tasks.HasTasks() || ((msgResult = GetMessageA(&msg, nullptr, 0, 0))))
+        while (GetMessageA(&msg, nullptr, 0, 0))
         {
-            if(Tasks.HasTasks())
-                Tasks.RunAllTasks();
-
-            if(!msgResult)
-                continue;
+            Tasks.RunAllTasks();
 
             TranslateMessage(&msg);
             DispatchMessage(&msg);
