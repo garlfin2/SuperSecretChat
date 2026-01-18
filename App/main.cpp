@@ -13,7 +13,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     Secretest::SocketContext socketContext{};
 
     Secretest::ClientWindow window{ uvec2(980, 720), Secretest::Address(LOCALHOST, 3283) };
-    Secretest::IWindow::RunWindows();
+    Secretest::Window::RunWindows();
 
     return 0;
 }

@@ -14,7 +14,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     Secretest::SocketContext context{};
 
     Secretest::ServerWindow window{ uvec2(980, 720), 3283 };
-    Secretest::IWindow::RunWindows();
+    Secretest::Window::RunWindows();
 
     return 0;
 }

@@ -13,10 +13,11 @@ namespace Secretest
     ServerWindow::ServerWindow(uvec2 size, uint16_t port) :
         Window("Secretest Server", uvec2(), size),
         Server(port),
-        _connectionCountLabel("Connections: 0", uvec2(32, 32), uvec2(128, 32), *this),
-        _messageField(uvec2(32, 160), uvec2(128, 32), *this),
-        _submitMessageButton("Send", uvec2(192, 160), uvec2(128, 32), *this, this, &ServerWindow::SubmitMessageButton)
+        _connectionCountLabel("Connections: 0", WindowTransform{ vec2(0.05f), vec2(0.2f, 0.05f) }, *this),
+        _messageField(WindowTransform{ vec2(0.05f, 0.15f), vec2(0.2f, 0.05f) }, *this),
+        _submitMessageButton("Send", WindowTransform{ vec2(0.3f, 0.15f), vec2(0.3f, 0.05f) }, *this, this, &ServerWindow::SubmitMessageButton)
     {
+        SetMinSize(512);
         Listen();
     }
 
@@ -24,7 +25,7 @@ namespace Secretest
     {
         Server::OnConnect(connection);
 
-        connection.Send("Welcome to the server!"sv);
+        std::ignore = connection.Send("Welcome to the server!"sv);
 
         UpdateClientCountLabel();
     }

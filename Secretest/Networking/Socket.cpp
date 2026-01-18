@@ -144,7 +144,8 @@ namespace Secretest
         {
             for(uint8_t retry = 0; retry < retryCount; retry++)
             {
-                OnConnectAttempt(retry);
+                if(retry)
+                    OnConnectAttempt(retry + 1);
                 InternalConnect();
                 if(IsConnected())
                     break;

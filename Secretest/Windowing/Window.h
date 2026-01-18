@@ -8,6 +8,7 @@
 
 #include <Secretest/Utility/vec2.h>
 #include <functional>
+#include <minwindef.h>
 #include <string>
 #include <thread>
 
@@ -17,21 +18,40 @@ using LRESULT = int64_t;
 
 namespace Secretest
 {
+    enum class TransformMode : uint8_t
+    {
+        Relative,
+        Absolute
+    };
+
+    struct WindowTransform
+    {
+        vec2 Position = vec2();
+        vec2 Size = vec2(1.f);
+
+        vec<2, TransformMode> PositionMode = TransformMode::Relative;
+        vec<2, TransformMode> ScaleMode = TransformMode::Relative;
+
+        [[nodiscard]] WindowTransform Normalize(vec2 windowSize) const;
+    };
+
     struct IWindowType
     {
         std::string_view Class;
         long Flags;
     };
 
+    using WindowProc = LRESULT(*)(HWND, uint, uint64_t, int64_t);
     struct IWindowClass
     {
         std::string_view Name;
+        WindowProc WindowProc;
     };
 
     class IWindow
     {
     public:
-        IWindow(IWindowType windowStyle, std::string_view name, uvec2 position, uvec2 size, const IWindow* parent = nullptr);
+        IWindow(IWindowType windowStyle, std::string_view name, const WindowTransform& transform, const IWindow* parent = nullptr);
         virtual ~IWindow();
 
         IWindow(IWindow&&) noexcept;
@@ -40,28 +60,30 @@ namespace Secretest
         IWindow(const IWindow&) = delete;
         IWindow& operator=(const IWindow&) = delete;
 
-        static void RunWindows();
-        static void RegisterDefaultStyles();
+        [[nodiscard]] const WindowTransform& GetRelativeTransform() const { return _transform; }
+        [[nodiscard]] WindowTransform GetGlobalTransform() const;
+        void SetWindowTransform(const WindowTransform& transform);
 
-        [[nodiscard]] u16vec2 GetWindowSize() const { return _size; }
+        void RepaintAll() const;
+
+        friend class Window;
 
     protected:
-        virtual void ProcessInput(uint message, uint64_t wideParam, uint32_t param);
-        virtual void Paint() {};
         virtual void OnCommand() = 0;
+        virtual void OnPaint();
+        void SetWindowTransformInternal(const WindowTransform& transform) { _transform = transform; }
 
-        static void RegisterStyle(const IWindowClass& windowClass);
         static TaskQueue Tasks;
 
         [[nodiscard]] HWND GetHWND() const { return _hwnd; }
 
     private:
-        static LRESULT WindowProc(HWND, uint, uint64_t, int64_t);
+        void UpdateTransform() const;
 
         HWND _hwnd;
 
         const IWindow* _parent;
-        u16vec2 _size;
+        WindowTransform _transform;
     };
 
     template<class FUNC_T>
@@ -72,8 +94,8 @@ namespace Secretest
     {
     public:
         template<typename... ARGS>
-        IButton(std::string_view text, uvec2 pos, uvec2 size, const IWindow& window, ARGS&&... args) :
-            IWindow({ "Button", 0 }, text, pos, size, &window),
+        IButton(std::string_view text, const WindowTransform& transform, const IWindow& window, ARGS&&... args) :
+            IWindow({ "Button", 0 }, text, transform, &window),
             _func(std::forward<ARGS>(args)...)
         {}
 
@@ -104,7 +126,7 @@ namespace Secretest
     class TextField final : public IWindow
     {
     public:
-        TextField(uvec2 pos, uvec2 size, const IWindow& window, std::string_view defaultText = "");
+        TextField(const WindowTransform& transform, const IWindow& window, std::string_view defaultText = "");
 
         [[nodiscard]] std::string_view GetText() const { return _text; }
         void SetText(std::string_view text);
@@ -120,7 +142,7 @@ namespace Secretest
     class Label final : public IWindow
     {
     public:
-        Label(std::string_view text, uvec2 pos, uvec2 size, const IWindow& window);
+        Label(std::string_view text, const WindowTransform& transform, const IWindow& window);
 
         void SetText(std::string_view text) const;
 
@@ -128,15 +150,39 @@ namespace Secretest
         void OnCommand() override {};
     };
 
+    enum class WindowType : uint32_t
+    {
+        Normal = 0x00CF0000l,
+        Popup = 0x80880000l,
+    };
+
     class Window : public IWindow
     {
     public:
-        Window(std::string_view name, uvec2 position, uvec2 size);
+        Window(std::string_view name, uvec2 pos, uvec2 size, WindowType type = WindowType::Normal);
 
-        void RepaintAll() const;
+        static void RunWindows();
+        static void RegisterStyle(const IWindowClass& windowClass);
+        static void RegisterDefaultStyles();
+
+        void SetWindowTransform(uvec2 position, uvec2 size);
+
+        void SetMinMaxSize(uvec2 min, uvec2 max) { _minSize = min; _maxSize = max; }
+        void SetMinSize(uvec2 min) { _minSize = min; }
+        void SetMaxSize(uvec2 max) { _maxSize = max; }
 
     protected:
-        void Paint() override;
+        virtual void ProcessInput(uint message, uint64_t wParam, int64_t param);
+        void OnPaint() override;
         void OnCommand() override {};
+
+    private:
+        static LRESULT WindowProc(HWND, uint, uint64_t, int64_t);
+        static LRESULT WindowProcNoQuit(HWND hwnd, UINT uMSG, WPARAM wParam, LPARAM lParam);
+
+        using IWindow::SetWindowTransform;
+
+        uvec2 _minSize = 0;
+        uvec2 _maxSize = INT32_MAX;
     };
 }
