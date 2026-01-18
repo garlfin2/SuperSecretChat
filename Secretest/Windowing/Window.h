@@ -171,6 +171,8 @@ namespace Secretest
         void SetMinSize(uvec2 min) { _minSize = min; }
         void SetMaxSize(uvec2 max) { _maxSize = max; }
 
+        ~Window();
+
     protected:
         virtual void ProcessInput(uint message, uint64_t wParam, int64_t param);
         void OnPaint() override;
@@ -179,6 +181,7 @@ namespace Secretest
     private:
         static LRESULT WindowProc(HWND, uint, uint64_t, int64_t);
         static LRESULT WindowProcNoQuit(HWND hwnd, UINT uMSG, WPARAM wParam, LPARAM lParam);
+        static std::vector<Window*> _openWindows;
 
         using IWindow::SetWindowTransform;
 

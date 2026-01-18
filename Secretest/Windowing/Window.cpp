@@ -133,44 +133,6 @@ namespace Secretest
         SetWindowTextA(GetHWND(), text.data());
     }
 
-    Window::Window(std::string_view name, uvec2 pos, uvec2 size, WindowType type) :
-       IWindow(IWindowType{ type == WindowType::Normal ? "Window" : "Subwindow", static_cast<long>(type) }, name, WindowTransform{vec2(pos), vec2(size), TransformMode::Absolute, TransformMode::Absolute})
-    {
-    }
-
-    void Window::OnPaint()
-    {
-        EnumChildWindows(GetHWND(), [](HWND hwnd, LPARAM)
-        {
-            IWindow* window = reinterpret_cast<IWindow*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
-
-            window->OnPaint();
-
-            return 1;
-        },0);
-
-        RepaintAll();
-
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(GetHWND(), &ps);
-
-        FillRect(hdc, &ps.rcPaint, reinterpret_cast<HBRUSH>(COLOR_WINDOW));
-
-        EndPaint(GetHWND(), &ps);
-    }
-
-    void Window::RunWindows()
-    {
-        SetTimer(nullptr, 0, 100, nullptr);
-        MSG msg{};
-        while (GetMessageA(&msg, nullptr, 0, 0))
-        {
-            Tasks.RunAllTasks();
-
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-        }
-    }
 
     WindowTransform IWindow::GetGlobalTransform() const
     {
@@ -216,10 +178,53 @@ namespace Secretest
         RepaintAll();
     }
 
+    Window::Window(std::string_view name, uvec2 pos, uvec2 size, WindowType type) :
+       IWindow(IWindowType{ type == WindowType::Normal ? "Window" : "Popup", static_cast<long>(type) }, name, WindowTransform{vec2(pos), vec2(size), TransformMode::Absolute, TransformMode::Absolute})
+    {
+        _openWindows.push_back(this);
+    }
+
+    void Window::OnPaint()
+    {
+        EnumChildWindows(GetHWND(), [](HWND hwnd, LPARAM)
+        {
+            IWindow* window = reinterpret_cast<IWindow*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+
+            window->OnPaint();
+
+            return 1;
+        },0);
+
+        RepaintAll();
+
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(GetHWND(), &ps);
+
+        FillRect(hdc, &ps.rcPaint, reinterpret_cast<HBRUSH>(COLOR_WINDOW));
+
+        EndPaint(GetHWND(), &ps);
+    }
+
+    void Window::RunWindows()
+    {
+        SetTimer(nullptr, 0, 100, nullptr);
+        MSG msg{};
+        while (GetMessageA(&msg, nullptr, 0, 0))
+        {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+
+            Tasks.RunAllTasks();
+        }
+    }
+
     LRESULT Window::WindowProc(HWND hwnd, UINT uMSG, WPARAM wParam, LPARAM lParam)
     {
-        if(auto* obj = reinterpret_cast<Window*>(GetWindowLongPtr(hwnd, GWLP_USERDATA)))
-            obj->ProcessInput(uMSG, wParam, lParam);
+        Window* window = reinterpret_cast<Window*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
+
+        if(window && std::ranges::contains(_openWindows, window))
+            window->ProcessInput(uMSG, wParam, lParam);
+
         return DefWindowProcA(hwnd, uMSG, wParam, lParam);
     }
 
@@ -237,7 +242,7 @@ namespace Secretest
         if(wasRegistered) return;
 
         RegisterStyle(IWindowClass{ "Window", WindowProc });
-        RegisterStyle(IWindowClass{ "Subwindow", WindowProcNoQuit });
+        RegisterStyle(IWindowClass{ "Popup", WindowProcNoQuit });
 
         wasRegistered = true;
     }
@@ -264,10 +269,16 @@ namespace Secretest
         RegisterClass(&wndclass);
     }
 
+    Window::~Window()
+    {
+        std::iter_swap(std::ranges::find(_openWindows, this), _openWindows.end() - 1);
+        _openWindows.pop_back();
+    }
+
     void Window::ProcessInput(uint message, uint64_t wParam, int64_t param)
     {
         IWindow* window = reinterpret_cast<IWindow*>(GetWindowLongPtr(reinterpret_cast<HWND>(param), GWLP_USERDATA));
-        LPMINMAXINFO lpMMI = reinterpret_cast<LPMINMAXINFO>(param);
+        LPMINMAXINFO minMaxInfo = reinterpret_cast<LPMINMAXINFO>(param);
 
         switch(message)
         {
@@ -290,11 +301,13 @@ namespace Secretest
             window->OnCommand();
             break;
         case WM_GETMINMAXINFO:
-            lpMMI->ptMinTrackSize = POINT(_minSize.x, _minSize.y);
-            lpMMI->ptMaxTrackSize = POINT(_maxSize.x, _maxSize.y);
+            minMaxInfo->ptMinTrackSize = POINT(_minSize.x, _minSize.y);
+            minMaxInfo->ptMaxTrackSize = POINT(_maxSize.x, _maxSize.y);
             break;
         default:
             break;
         }
     }
+
+    std::vector<Window*> Window::_openWindows = {};
 }
