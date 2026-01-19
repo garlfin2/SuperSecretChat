@@ -62,6 +62,7 @@ namespace Secretest
 
     IWindow::~IWindow()
     {
+        _isOpen = false;
         DestroyWindow(_hwnd);
         _hwnd = nullptr;
     }
@@ -73,6 +74,7 @@ namespace Secretest
 
         _transform = b._transform;
         _parent = b._parent;
+        _isOpen = b._isOpen;
 
         SetWindowLongPtr(_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     }
@@ -89,6 +91,7 @@ namespace Secretest
 
         _transform = b._transform;
         _parent = b._parent;
+        _isOpen = b._isOpen;
 
         SetWindowLongPtr(_hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
 
@@ -181,7 +184,6 @@ namespace Secretest
     Window::Window(std::string_view name, uvec2 pos, uvec2 size, WindowType type) :
        IWindow(IWindowType{ type == WindowType::Normal ? "Window" : "Popup", static_cast<long>(type) }, name, WindowTransform{vec2(pos), vec2(size), TransformMode::Absolute, TransformMode::Absolute})
     {
-        _openWindows.push_back(this);
     }
 
     void Window::OnPaint()
@@ -222,7 +224,7 @@ namespace Secretest
     {
         Window* window = reinterpret_cast<Window*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
 
-        if(window && std::ranges::contains(_openWindows, window))
+        if(window && window->IsOpen())
             window->ProcessInput(uMSG, wParam, lParam);
 
         return DefWindowProcA(hwnd, uMSG, wParam, lParam);
@@ -269,12 +271,6 @@ namespace Secretest
         RegisterClass(&wndclass);
     }
 
-    Window::~Window()
-    {
-        std::iter_swap(std::ranges::find(_openWindows, this), _openWindows.end() - 1);
-        _openWindows.pop_back();
-    }
-
     void Window::ProcessInput(uint message, uint64_t wParam, int64_t param)
     {
         IWindow* window = reinterpret_cast<IWindow*>(GetWindowLongPtr(reinterpret_cast<HWND>(param), GWLP_USERDATA));
@@ -308,6 +304,4 @@ namespace Secretest
             break;
         }
     }
-
-    std::vector<Window*> Window::_openWindows = {};
 }
